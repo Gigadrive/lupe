@@ -8,6 +8,7 @@ import {
   parseState,
   type AnchoredComment,
   type ApplyFixInput,
+  type ApplyFixesResult,
   type DiffFile,
   type GitHubClientService,
   type PostReviewInput,
