@@ -32,6 +32,12 @@ export interface ReviewTuning {
   /** Use the strongest model + extra passes. */
   readonly thorough?: boolean;
   readonly pathFilters?: readonly string[];
+  /** Max serialised-diff tokens per review pass (large-PR map-reduce). Default 120_000. */
+  readonly maxChunkTokens?: number;
+  /** Hard ceiling on review passes. Overflow is reported on the result, not dropped silently. */
+  readonly maxChunks?: number;
+  /** Bounded concurrency for the fan-out chunk passes. Default 3. */
+  readonly reviewConcurrency?: number;
 }
 
 export interface ReviewResult {
@@ -89,6 +95,7 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
     const compressed = compressDiff(acquired, {
       pathFilters: options.pathFilters,
       maxFilesReviewed: options.maxFiles,
+      chunk: true,
     });
     if (compressed.files.length === 0) return EMPTY_RESULT;
 
@@ -102,6 +109,9 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
       profile: options.profile,
       maxFindings: options.maxFindings,
       confidenceThreshold: options.confidenceThreshold,
+      maxChunkTokens: options.maxChunkTokens,
+      maxChunks: options.maxChunks,
+      reviewConcurrency: options.reviewConcurrency,
       verify: options.verify,
       task: options.thorough ? 'deep' : 'review',
     });
@@ -146,6 +156,7 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
     const compressed = compressDiff(files, {
       pathFilters: options.pathFilters,
       maxFilesReviewed: options.maxFiles,
+      chunk: true,
     });
     if (compressed.files.length === 0) {
       return { ...EMPTY_RESULT, posted: false } satisfies PullRequestReviewResult;
@@ -158,6 +169,9 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
         profile: options.profile,
         maxFindings: options.maxFindings,
         confidenceThreshold: options.confidenceThreshold,
+        maxChunkTokens: options.maxChunkTokens,
+        maxChunks: options.maxChunks,
+        reviewConcurrency: options.reviewConcurrency,
         verify: options.verify,
         task: options.thorough ? 'deep' : 'review',
       }

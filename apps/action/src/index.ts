@@ -74,6 +74,9 @@ const program = Effect.gen(function* () {
   const baseURL = core.getInput('base-url') || undefined;
   const maxFiles = intInput('max-files');
   const maxFindings = intInput('max-findings');
+  const maxChunkTokens = intInput('max-chunk-tokens');
+  const maxChunks = intInput('max-chunks');
+  const reviewConcurrency = intInput('review-concurrency');
   const thorough = (core.getInput('thorough') || 'false') === 'true';
   const failOn = (core.getInput('fail-on-severity') || FAIL_NONE).toLowerCase();
 
@@ -89,7 +92,7 @@ const program = Effect.gen(function* () {
     const gh = yield* GitHubClient;
     const lastReviewedSha = yield* gh.getLastReviewedSha(prRef);
     const files = yield* gh.listDiff(prRef);
-    const compressed = compressDiff(files, { maxFilesReviewed: maxFiles });
+    const compressed = compressDiff(files, { maxFilesReviewed: maxFiles, chunk: true });
     if (compressed.files.length === 0) {
       core.info('lupe: no reviewable changes.');
       return;
@@ -110,6 +113,9 @@ const program = Effect.gen(function* () {
     const result = yield* runReview(compressed.files, target, {
       profile,
       maxFindings,
+      maxChunkTokens,
+      maxChunks,
+      reviewConcurrency,
       verify: true,
       task: thorough ? 'deep' : 'review',
     });
@@ -125,11 +131,19 @@ const program = Effect.gen(function* () {
 
     core.setOutput('findings', String(result.findings.length));
     core.setOutput('cost-usd', result.cost.costUsd.toFixed(4));
+    core.setOutput('skipped', String(result.skippedForSize.length));
+    const passes = result.chunkCount > 1 ? ` · ${result.chunkCount} passes` : '';
     core.info(
       `lupe: ${result.findings.length} findings (${comments.length} inline, ${unanchored.length} summary-only) · ~$${result.cost.costUsd.toFixed(
         4
-      )}`
+      )}${passes}`
     );
+    if (result.skippedForSize.length > 0) {
+      core.warning(
+        `lupe: ${result.skippedForSize.length} changed file(s) NOT reviewed (size budget): ` +
+          `${result.skippedForSize.join(', ')}. Raise max-chunks, narrow the diff, or split the PR.`
+      );
+    }
 
     if (failOn !== FAIL_NONE) {
       const threshold = SEVERITY_RANK[failOn as Severity];

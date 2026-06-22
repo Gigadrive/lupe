@@ -90,8 +90,13 @@ export interface SummaryOptions {
   readonly title?: string;
   readonly cost?: CostSummary;
   readonly state?: LupeReviewState;
-  /** Findings already counted toward the "actionable" noise budget (non-advisory). */
   readonly headSha?: string;
+  /** Number of model passes used (large-PR map-reduce); only surfaced when > 1. */
+  readonly chunkCount?: number;
+  /** Files left unreviewed because the chunk ceiling was hit (surfaced, never silent). */
+  readonly skippedForSize?: readonly string[];
+  /** Files individually larger than one pass (reviewed in isolation). */
+  readonly oversizedFiles?: readonly string[];
 }
 
 /** Render the single sticky `<!-- lupe-summary -->` comment. */
@@ -127,6 +132,29 @@ export function renderSummaryMarkdown(findings: readonly Finding[], options: Sum
     }
     out.push('');
     out.push('</details>');
+  }
+
+  if (options.skippedForSize && options.skippedForSize.length > 0) {
+    out.push('');
+    out.push(
+      `> ⚠️ **${options.skippedForSize.length} changed file(s) were NOT reviewed** — the diff exceeded the ` +
+        'size budget. Raise `max-chunks` / `maxChunks`, narrow `pathFilters`, or split the PR:'
+    );
+    for (const p of options.skippedForSize) out.push(`> - \`${p}\``);
+  }
+
+  if (options.oversizedFiles && options.oversizedFiles.length > 0) {
+    out.push('');
+    out.push(
+      `> ℹ️ ${options.oversizedFiles.length} file(s) are individually larger than one review pass ` +
+        'and were reviewed in isolation:'
+    );
+    for (const p of options.oversizedFiles) out.push(`> - \`${p}\``);
+  }
+
+  if (options.chunkCount && options.chunkCount > 1) {
+    out.push('');
+    out.push(`<sub>Large diff — reviewed in ${options.chunkCount} passes.</sub>`);
   }
 
   if (options.cost) {

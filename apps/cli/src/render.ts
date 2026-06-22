@@ -66,11 +66,25 @@ export function formatReview(result: ReviewRunResult): string {
     }
   }
 
+  if (result.skippedForSize.length > 0) {
+    out.push(
+      c.yellow(
+        `⚠ ${result.skippedForSize.length} changed file(s) NOT reviewed (size budget): ` +
+          `${result.skippedForSize.join(', ')}`
+      )
+    );
+    out.push(c.gray('  Raise maxChunks / narrow pathFilters / split the change.'));
+  }
+  if (result.oversizedFiles.length > 0) {
+    out.push(c.gray(`${result.oversizedFiles.length} file(s) larger than one pass, reviewed in isolation.`));
+  }
+
   const cost = result.cost;
+  const passes = result.chunkCount > 1 ? ` · ${result.chunkCount} passes` : '';
   out.push(
     c.gray(
       `${result.findings.length} finding(s) · ${result.candidateCount} candidate(s) · ` +
-        `${result.dropped.verifier} dropped by verifier · ${result.dropped.filtered} filtered`
+        `${result.dropped.verifier} dropped by verifier · ${result.dropped.filtered} filtered${passes}`
     )
   );
   out.push(

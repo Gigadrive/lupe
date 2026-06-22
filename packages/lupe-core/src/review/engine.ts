@@ -9,6 +9,12 @@ export interface GenerateCandidatesOptions extends PromptOptions {
   /** Which model task to route the review through (default "review"). */
   readonly task?: ReviewTask;
   readonly maxSteps?: number;
+  /**
+   * Prebuilt frozen system prefix. When omitted it is built from the prompt
+   * options. The pipeline passes a single prebuilt prefix across all chunks so
+   * it stays byte-identical (the Anthropic prompt cache is prefix-keyed).
+   */
+  readonly system?: string;
 }
 
 /**
@@ -23,7 +29,7 @@ export function generateCandidates(
 ): Effect.Effect<GenerateFindingsResult, AiError, AiModel> {
   return Effect.gen(function* () {
     const ai = yield* AiModel;
-    const system = buildSystemPrompt(options);
+    const system = options.system ?? buildSystemPrompt(options);
     const prompt = buildReviewPrompt(files, target);
     return yield* ai.generateFindings({
       task: options.task ?? 'review',
