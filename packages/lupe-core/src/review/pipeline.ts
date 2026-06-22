@@ -7,14 +7,25 @@ import type { Finding } from '../finding';
 import { renderSummaryMarkdown } from '../render/markdown';
 import type { CostSummary, ReviewTarget, TokenUsage } from '../review';
 import { addUsage, EMPTY_USAGE } from '../review';
+import { planChunks } from './chunk';
 import { generateCandidates, type GenerateCandidatesOptions } from './engine';
 import { applyFilters, type FilterOptions } from './filter';
+import { buildSystemPrompt } from './prompt';
 import { verifyFindings } from './verify';
+
+/** Default bounded concurrency for the fan-out chunk passes. */
+const DEFAULT_REVIEW_CONCURRENCY = 3;
 
 export interface RunReviewOptions extends GenerateCandidatesOptions, FilterOptions {
   /** Run the grounding verifier (default true). */
   readonly verify?: boolean;
   readonly verifyConcurrency?: number;
+  /** Max serialised-diff tokens per review chunk (large-PR map-reduce). Default 120_000. */
+  readonly maxChunkTokens?: number;
+  /** Hard ceiling on the number of chunks. Default 8. Overflow is reported, not dropped silently. */
+  readonly maxChunks?: number;
+  /** Bounded concurrency for the fan-out chunk passes. Default 3. */
+  readonly reviewConcurrency?: number;
 }
 
 export interface ReviewRunResult {
@@ -23,6 +34,12 @@ export interface ReviewRunResult {
   readonly summaryMarkdown: string;
   readonly cost: CostSummary;
   readonly dropped: { readonly verifier: number; readonly filtered: number };
+  /** How many model passes the diff was reviewed in (1 unless it was chunked). */
+  readonly chunkCount: number;
+  /** Files left unreviewed because the chunk ceiling was hit (surfaced, never silent). */
+  readonly skippedForSize: readonly string[];
+  /** Files individually larger than one pass (reviewed in isolation). */
+  readonly oversizedFiles: readonly string[];
 }
 
 class CostAccumulator {
@@ -54,10 +71,37 @@ export function runReview(
   return Effect.gen(function* () {
     const cost = new CostAccumulator();
 
-    const generated = yield* generateCandidates(files, target, options);
-    cost.add(generated.model, generated.usage);
+    // Build the frozen, cacheable prefix once and reuse it across every chunk so
+    // it stays byte-identical — the Anthropic prompt cache is model-scoped and
+    // prefix-keyed, so chunks 2..N read the warm cache the first chunk primed.
+    const system = buildSystemPrompt(options);
+    const plan = planChunks(files, {
+      maxChunkTokens: options.maxChunkTokens,
+      maxChunks: options.maxChunks,
+    });
+    const { chunks } = plan;
 
-    let candidates = generated.findings;
+    const candidatesAll: Finding[] = [];
+    if (chunks.length > 0) {
+      // Prime the cache with the first chunk, then fan the rest out concurrently.
+      const first = yield* generateCandidates(chunks[0]!, target, { ...options, system });
+      cost.add(first.model, first.usage);
+      candidatesAll.push(...first.findings);
+
+      if (chunks.length > 1) {
+        const rest = yield* Effect.forEach(
+          chunks.slice(1),
+          (chunk) => generateCandidates(chunk, target, { ...options, system }),
+          { concurrency: options.reviewConcurrency ?? DEFAULT_REVIEW_CONCURRENCY }
+        );
+        for (const g of rest) {
+          cost.add(g.model, g.usage);
+          candidatesAll.push(...g.findings);
+        }
+      }
+    }
+
+    let candidates: readonly Finding[] = candidatesAll;
     let verifierDropped = 0;
 
     if (options.verify !== false && candidates.length > 0) {
@@ -71,14 +115,23 @@ export function runReview(
 
     const { kept, dropped } = applyFilters(candidates, options);
     const summary = cost.summary();
-    const summaryMarkdown = renderSummaryMarkdown(kept, { cost: summary, headSha: target?.headSha });
+    const summaryMarkdown = renderSummaryMarkdown(kept, {
+      cost: summary,
+      headSha: target?.headSha,
+      chunkCount: chunks.length,
+      skippedForSize: plan.skipped,
+      oversizedFiles: plan.oversizedFiles,
+    });
 
     return {
       findings: kept,
-      candidateCount: generated.findings.length,
+      candidateCount: candidatesAll.length,
       summaryMarkdown,
       cost: summary,
       dropped: { verifier: verifierDropped, filtered: dropped.length },
+      chunkCount: chunks.length,
+      skippedForSize: plan.skipped,
+      oversizedFiles: plan.oversizedFiles,
     };
   });
 }

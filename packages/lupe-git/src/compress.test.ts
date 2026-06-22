@@ -77,6 +77,15 @@ describe('compressDiff', () => {
     expect(result.files).toHaveLength(1);
   });
 
+  test('chunk mode does file selection only and never drops for token budget', () => {
+    // maxTokens that would normally truncate is ignored in chunk mode — the
+    // engine's chunked review handles the budget instead of dropping silently.
+    const result = compressDiff(FILES, { maxTokens: 1, chunk: true });
+    expect(result.truncated).toBe(false);
+    expect(result.files.map((f) => f.path)).toEqual(['src/feature.ts']); // content drops still apply
+    expect(result.dropped.some((d) => d.reason === 'budget')).toBe(false);
+  });
+
   test('serialiseFileDiff includes head line numbers', () => {
     const s = serialiseFileDiff(FILES[0]!);
     expect(s).toContain('src/feature.ts');

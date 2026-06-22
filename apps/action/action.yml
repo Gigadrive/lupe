@@ -30,6 +30,15 @@ inputs:
   thorough:
     description: 'Use the strongest model and extra passes.'
     default: 'false'
+  max-chunk-tokens:
+    description: 'Max serialised-diff tokens per review pass (large-PR map-reduce).'
+    default: ''
+  max-chunks:
+    description: 'Hard ceiling on review passes for a large PR. Overflow is reported, not silently dropped.'
+    default: ''
+  review-concurrency:
+    description: 'How many large-PR review passes to run concurrently.'
+    default: ''
   skip-draft:
     description: 'Skip draft pull requests.'
     default: 'true'
@@ -42,6 +51,8 @@ outputs:
     description: 'Number of findings posted.'
   cost-usd:
     description: 'Approximate USD cost of the review.'
+  skipped:
+    description: 'Number of changed files left unreviewed because the chunk ceiling was reached.'
 
 runs:
   using: 'node24'

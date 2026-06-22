@@ -27,6 +27,9 @@ export interface LupeFileConfig {
   readonly maxFiles?: number;
   readonly maxFindings?: number;
   readonly confidenceThreshold?: number;
+  readonly maxChunkTokens?: number;
+  readonly maxChunks?: number;
+  readonly reviewConcurrency?: number;
 }
 
 type RawConfig = Record<string, unknown>;
@@ -64,6 +67,9 @@ function normalize(raw: RawConfig): LupeFileConfig {
     maxFiles: pickNumber(get('maxFiles', 'max_files')),
     maxFindings: pickNumber(get('maxFindings', 'max_findings')),
     confidenceThreshold: pickNumber(get('confidenceThreshold', 'confidence_threshold')),
+    maxChunkTokens: pickNumber(get('maxChunkTokens', 'max_chunk_tokens')),
+    maxChunks: pickNumber(get('maxChunks', 'max_chunks')),
+    reviewConcurrency: pickNumber(get('reviewConcurrency', 'review_concurrency')),
   };
 }
 

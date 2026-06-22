@@ -55,6 +55,32 @@ const CANDIDATES = [
   finding({ title: 'Low confidence guess', confidence: 0.2, startLine: 3 }),
 ];
 
+function mkFile(path: string): DiffFile {
+  return { path, status: 'modified', binary: false, additions: 1, deletions: 0, hunks: [] };
+}
+
+/** Like fakeAi, but records the frozen system prefix each generation call receives. */
+function capturingAi(
+  candidates: readonly Finding[],
+  usage = EMPTY_USAGE
+): { layer: Layer.Layer<AiModel>; systems: string[] } {
+  const systems: string[] = [];
+  const service: AiModelService = {
+    generateFindings: (input) => {
+      systems.push(input.system);
+      return Effect.succeed({ findings: candidates, usage, model: 'fake-review', steps: 1 });
+    },
+    verify: ({ candidate }) =>
+      Effect.succeed({
+        grounded: !candidate.title.includes('SPURIOUS'),
+        reason: '',
+        usage: EMPTY_USAGE,
+        model: 'fake-verify',
+      }),
+  };
+  return { layer: Layer.succeed(AiModel, service), systems };
+}
+
 describe('runReview pipeline', () => {
   test('verifier drops ungrounded, filter drops low-confidence', async () => {
     const result = await Effect.runPromise(
@@ -79,5 +105,45 @@ describe('runReview pipeline', () => {
   test('cost summary aggregates per model', async () => {
     const result = await Effect.runPromise(runReview([FILE], undefined, {}).pipe(Effect.provide(fakeAi([finding()]))));
     expect(result.cost.byModel.map((m) => m.model).sort()).toEqual(['fake-review', 'fake-verify']);
+  });
+
+  test('single-chunk path stays one pass with nothing skipped', async () => {
+    const result = await Effect.runPromise(runReview([FILE], undefined, {}).pipe(Effect.provide(fakeAi([finding()]))));
+    expect(result.chunkCount).toBe(1);
+    expect(result.skippedForSize).toEqual([]);
+    expect(result.oversizedFiles).toEqual([]);
+  });
+});
+
+describe('runReview large-PR chunking', () => {
+  test('reviews every chunk, merges + dedups, sums usage, reuses one frozen prefix', async () => {
+    const files = [mkFile('a.ts'), mkFile('b.ts'), mkFile('c.ts')];
+    const candidate = [finding({ title: 'Real bug', confidence: 0.9, path: 'a.ts', startLine: 1 })];
+    const usage = { inputTokens: 10, outputTokens: 5, cacheCreationTokens: 0, cacheReadTokens: 0 };
+    const { layer, systems } = capturingAi(candidate, usage);
+
+    // maxChunkTokens: 1 forces one model pass per file.
+    const result = await Effect.runPromise(
+      runReview(files, undefined, { maxChunkTokens: 1 }).pipe(Effect.provide(layer))
+    );
+
+    expect(result.chunkCount).toBe(3);
+    expect(systems).toHaveLength(3); // one generation call per chunk
+    expect(new Set(systems).size).toBe(1); // identical prefix across chunks → prompt-cache safe
+    expect(result.candidateCount).toBe(3); // one candidate per chunk, before dedup
+    expect(result.findings).toHaveLength(1); // identical findings collapse
+    const review = result.cost.byModel.find((m) => m.model === 'fake-review');
+    expect(review?.usage.inputTokens).toBe(30); // summed across the 3 passes
+  });
+
+  test('files beyond the chunk ceiling are reported, never silently dropped', async () => {
+    const files = [mkFile('a.ts'), mkFile('b.ts'), mkFile('c.ts')];
+    const { layer } = capturingAi([finding({ path: 'a.ts' })]);
+    const result = await Effect.runPromise(
+      runReview(files, undefined, { maxChunkTokens: 1, maxChunks: 2 }).pipe(Effect.provide(layer))
+    );
+    expect(result.chunkCount).toBe(2);
+    expect(result.skippedForSize).toEqual(['c.ts']);
+    expect(result.summaryMarkdown).toContain('NOT reviewed');
   });
 });

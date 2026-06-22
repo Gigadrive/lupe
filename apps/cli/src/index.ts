@@ -81,6 +81,7 @@ function runReviewFlow(flags: ReviewFlags) {
       const compressed = compressDiff(files, {
         pathFilters: fileConfig.pathFilters,
         maxFilesReviewed: flags.maxFiles ?? fileConfig.maxFiles,
+        chunk: true,
       });
       if (compressed.files.length === 0) {
         yield* Console.log(colors.gray('No reviewable changes.'));
@@ -92,10 +93,23 @@ function runReviewFlow(flags: ReviewFlags) {
         pathInstructions: fileConfig.pathInstructions,
         confidenceThreshold: fileConfig.confidenceThreshold,
         maxFindings: flags.maxFindings ?? fileConfig.maxFindings,
+        maxChunkTokens: fileConfig.maxChunkTokens,
+        maxChunks: fileConfig.maxChunks,
+        reviewConcurrency: fileConfig.reviewConcurrency,
         learnings,
         verify: flags.verify,
         task: flags.thorough ? 'deep' : 'review',
       });
+      if (result.chunkCount > 1) {
+        yield* Console.error(colors.gray(`Reviewed in ${result.chunkCount} passes (large diff).`));
+      }
+      if (result.skippedForSize.length > 0 && flags.format !== 'md') {
+        yield* Console.error(
+          colors.yellow(
+            `! ${result.skippedForSize.length} file(s) not reviewed (size budget). Raise maxChunks or split the change.`
+          )
+        );
+      }
       yield* emit(result, flags.format);
     });
 

@@ -104,6 +104,12 @@ export interface CompressOptions {
   readonly maxTokens?: number;
   /** Per-file hunk cap; oversized files are truncated, not dropped. */
   readonly maxFilesReviewed?: number;
+  /**
+   * Chunk mode: do file selection only and skip the token-budget drop. Over-budget
+   * files are then handled by the engine's chunked map-reduce review instead of
+   * being silently truncated here. `maxFilesReviewed` and content drops still apply.
+   */
+  readonly chunk?: boolean;
 }
 
 export interface CompressedContext {
@@ -155,6 +161,13 @@ export function compressDiff(files: readonly DiffFile[], options: CompressOption
       ? ranked.slice(0, options.maxFilesReviewed)
       : ranked;
   for (const f of ranked.slice(limited.length)) dropped.push({ path: f.path, reason: 'budget' });
+
+  // Chunk mode: file selection only. Token budgeting is handled downstream by the
+  // engine's chunked review, so we never silently drop over-budget files here.
+  if (options.chunk) {
+    const tokens = limited.reduce((acc, f) => acc + estimateTokens(serialiseFileDiff(f)), 0);
+    return { files: limited, dropped, tokens, truncated: false };
+  }
 
   const included: DiffFile[] = [];
   let tokens = 0;
