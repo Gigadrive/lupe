@@ -1,0 +1,93 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "timezone": "UTC",
+  "schedule": ["after 02:00 and before 06:00 every weekday"],
+  "dependencyDashboard": true,
+  "rebaseWhen": "behind-base-branch",
+  "labels": ["dependencies", "renovate"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 10,
+  "minimumReleaseAge": "3 days",
+  "recreateWhen": "always",
+  "enabledManagers": ["npm", "github-actions"],
+  "lockFileMaintenance": { "enabled": false },
+  "npm": { "postUpdateOptions": ["pnpmDedupe"] },
+  "vulnerabilityAlerts": { "labels": ["security"] },
+  "packageRules": [
+    {
+      "description": "Wait for npm releases to age before creating update branches",
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "description": "Require dashboard approval for major updates",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Automerge devDependency patch/minor updates",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "No automerge for runtime dependencies",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["dependencies"],
+      "automerge": false
+    },
+    {
+      "description": "Automerge GitHub Actions patch/minor updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Use bump strategy for pnpm catalog changes",
+      "matchFileNames": ["pnpm-workspace.yaml"],
+      "automerge": false,
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Group vitest packages so they always update together",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["/^vitest$/", "/^@vitest\\//"],
+      "groupName": "vitest",
+      "automerge": false
+    },
+    {
+      "description": "Group the Effect ecosystem to satisfy peer dependencies",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["/^effect$/", "/^@effect\\//"],
+      "groupName": "effect",
+      "automerge": false
+    },
+    {
+      "description": "Group the Vercel AI SDK packages (they must move together)",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["/^ai$/", "/^@ai-sdk\\//"],
+      "groupName": "ai-sdk",
+      "automerge": false
+    },
+    {
+      "description": "Group Octokit packages",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["/^@octokit\\//"],
+      "groupName": "octokit",
+      "automerge": false
+    },
+    {
+      "description": "Group oxc tooling (oxlint, oxfmt)",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["oxlint", "oxfmt"],
+      "groupName": "oxc",
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}

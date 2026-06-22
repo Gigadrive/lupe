@@ -11,6 +11,7 @@
   "sortPackageJson": {},
   "ignorePatterns": [
     "pnpm-lock.yaml",
+    "renovate.json",
     "**/dist/**",
     "**/node_modules/**",
     "**/.turbo/**",
