@@ -3,6 +3,7 @@ import type { Effect } from 'effect';
 
 import type { DiffFile, Anchor } from './diff';
 import type { DiffParseError, GitHubError } from './errors';
+import type { Side } from './finding';
 import type { PullRequestRef, ReviewTarget } from './review';
 
 /**
@@ -43,6 +44,25 @@ export interface PostReviewInput {
   readonly resolveStaleThreads: boolean;
 }
 
+/** A single auto-fix to apply to the PR branch. */
+export interface ApplyFixInput {
+  readonly pr: PullRequestRef;
+  readonly headSha: string;
+  readonly path: string;
+  /** Replacement text for the anchored range (exact lines from startLine to endLine on the given side). */
+  readonly replacement: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly side: Side;
+  /** Commit message for the auto-fix. */
+  readonly message: string;
+}
+
+export interface ApplyFixesResult {
+  readonly applied: readonly { path: string; sha: string }[];
+  readonly failed: readonly { path: string; reason: string }[];
+}
+
 /**
  * GitHub transport. Implemented by @gigadrive/lupe-github. The engine depends
  * only on this interface, so the CLI (print mode) can omit it entirely.
@@ -64,6 +84,11 @@ export interface GitHubClientService {
   readonly getLastReviewedSha: (pr: PullRequestRef) => Effect.Effect<string | undefined, GitHubError>;
   /** Post ALL findings as one review + upsert the sticky summary. */
   readonly postReview: (input: PostReviewInput) => Effect.Effect<void, GitHubError>;
+  /**
+   * Apply auto-fixes to the PR branch using the Git Data API.
+   * Creates one commit per file with all fixes consolidated.
+   */
+  readonly applyFixes: (inputs: readonly ApplyFixInput[]) => Effect.Effect<ApplyFixesResult, GitHubError>;
 }
 
 export class GitHubClient extends Context.Tag('@gigadrive/lupe-core/GitHubClient')<

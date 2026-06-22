@@ -7,6 +7,7 @@ import {
   SUMMARY_MARKER,
   parseState,
   type AnchoredComment,
+  type ApplyFixInput,
   type DiffFile,
   type GitHubClientService,
   type PostReviewInput,
@@ -223,7 +224,122 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
-  return { listDiff, listDiffSince, getLastReviewedSha, postReview };
+  /** Apply a set of suggestion-based fixes to the PR branch using the Git Data API. */
+  const applyFixes = (inputs: readonly ApplyFixInput[]): Effect.Effect<ApplyFixesResult, GitHubError> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (inputs.length === 0) return { applied: [], failed: [] };
+
+        const applied: { path: string; sha: string }[] = [];
+        const failed: { path: string; reason: string }[] = [];
+
+        // Group fixes by file path.
+        const byPath = new Map<string, ApplyFixInput[]>();
+        for (const input of inputs) {
+          const list = byPath.get(input.path) ?? [];
+          list.push(input);
+          byPath.set(input.path, list);
+        }
+
+        // Process each file: get content, apply all replacements, commit.
+        for (const [path, fixes] of byPath) {
+          try {
+            // Get the current file content from the PR head.
+            const { data: refData } = await octokit.rest.git.getRef({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              ref: `heads/${inputs[0]!.pr.repo}/${inputs[0]!.headSha}`,
+            });
+
+            // Get the file blob SHA from the tree at headSha.
+            const treeSha = (refData.object as { sha: string }).sha;
+            const { data: treeData } = await octokit.rest.git.getTree({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              tree_sha: treeSha,
+              recursive: 'true',
+            });
+
+            const entry = (treeData.tree as { path: string; sha: string; type: string }[]).find(
+              (e) => e.path === path && e.type === 'blob'
+            );
+            if (!entry) {
+              failed.push({ path, reason: 'file not found in PR branch tree' });
+              continue;
+            }
+
+            // Get the current file content.
+            const { data: blobData } = await octokit.rest.git.getBlob({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              file_sha: entry.sha,
+            });
+            const content = Buffer.from((blobData as { content: string }).content, 'base64').toString('utf8');
+            const lines = content.split('\n');
+
+            // Sort fixes by descending line number so we replace from bottom to top.
+            const sorted = [...fixes].sort((a, b) => b.startLine - a.startLine);
+
+            for (const fix of sorted) {
+              // Adjust for 1-based line numbers.
+              const start = fix.startLine - 1;
+              const end = fix.endLine;
+              const replacementLines = fix.replacement.split('\n');
+              lines.splice(start, end - start, ...replacementLines);
+            }
+
+            const newContent = lines.join('\n');
+            const newContentBase64 = Buffer.from(newContent, 'utf8').toString('base64');
+
+            // Create a new blob.
+            const { data: newBlob } = await octokit.rest.git.createBlob({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              content: newContentBase64,
+              encoding: 'base64',
+            });
+
+            // Build a new tree with the updated blob.
+            const { data: newTree } = await octokit.rest.git.createTree({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              base_tree: treeSha,
+              tree: [{ path, mode: '100644', type: 'blob', sha: (newBlob as { sha: string }).sha }],
+            });
+
+            // Get the current commit to use as parent.
+            const commitSha = treeSha;
+
+            // Create a new commit.
+            const { data: newCommit } = await octokit.rest.git.createCommit({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              message: fixes.map((f) => f.message).join('\n---\n'),
+              tree: (newTree as { sha: string }).sha,
+              parents: [commitSha],
+            });
+
+            // Update the PR branch ref to the new commit.
+            await octokit.rest.git.updateRef({
+              owner: inputs[0]!.pr.owner,
+              repo: inputs[0]!.pr.repo,
+              ref: `heads/${inputs[0]!.pr.repo}/${inputs[0]!.headSha}`,
+              sha: (newCommit as { sha: string }).sha,
+              force: false,
+            });
+
+            applied.push({ path, sha: (newCommit as { sha: string }).sha });
+          } catch (err) {
+            failed.push({ path, reason: err instanceof Error ? err.message : String(err) });
+          }
+        }
+
+        return { applied, failed };
+      },
+      catch: toGitHubError,
+    });
+
+  return { listDiff, listDiffSince, getLastReviewedSha, postReview, applyFixes };
 }
 
 /** Effect Layer providing the GitHub transport for a token. */
