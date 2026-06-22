@@ -1,0 +1,43 @@
+{
+  "name": "@gigadrive/lupe",
+  "version": "0.0.0",
+  "description": "lupe — platform- and provider-agnostic AI code review agent. BYO tokens or local Claude Code / Codex credentials.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "lupe": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "check:exports": "publint --strict",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@gigadrive/lupe-core": "workspace:*",
+    "@gigadrive/lupe-git": "workspace:*",
+    "@gigadrive/lupe-github": "workspace:*",
+    "@effect/cli": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
+    "@clack/prompts": "catalog:",
+    "c12": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.18.0"
+  }
+}

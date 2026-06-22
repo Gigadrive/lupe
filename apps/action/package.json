@@ -1,0 +1,32 @@
+{
+  "name": "@gigadrive/lupe-action",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The reusable lupe GitHub Action (Node 24, ncc-bundled).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist --target es2022",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@gigadrive/lupe-core": "workspace:*",
+    "@gigadrive/lupe-git": "workspace:*",
+    "@gigadrive/lupe-github": "workspace:*",
+    "@actions/core": "catalog:",
+    "@actions/github": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "0.44.0",
+    "@types/node": "catalog:",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.18.0"
+  }
+}

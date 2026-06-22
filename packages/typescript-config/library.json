@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "lupe library",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "noEmit": true
+  }
+}

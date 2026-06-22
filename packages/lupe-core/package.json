@@ -1,0 +1,50 @@
+{
+  "name": "@gigadrive/lupe-core",
+  "version": "0.0.0",
+  "description": "The lupe review engine: finding model, provider registry, agent loop, grounding verifier, filter chain, and renderers.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "check:exports": "publint --strict",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "ai": "catalog:",
+    "@ai-sdk/anthropic": "catalog:",
+    "@ai-sdk/openai": "catalog:",
+    "@ai-sdk/google": "catalog:",
+    "@ai-sdk/amazon-bedrock": "catalog:",
+    "@ai-sdk/openai-compatible": "catalog:",
+    "@ai-sdk/gateway": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": ">=3.21.0 <4"
+  },
+  "devDependencies": {
+    "effect": "catalog:",
+    "@types/node": "catalog:",
+    "@repo/typescript-config": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.18.0"
+  }
+}

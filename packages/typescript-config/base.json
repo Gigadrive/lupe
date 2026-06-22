@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "lupe base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2023",
+    "lib": ["es2023"],
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "useDefineForClassFields": true,
+    "noEmit": true
+  }
+}

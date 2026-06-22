@@ -1,0 +1,64 @@
+import { Context } from "effect";
+import type { Effect } from "effect";
+import type { DiffFile, Anchor } from "./diff";
+import type { PullRequestRef, ReviewTarget } from "./review";
+import type { DiffParseError, GitHubError } from "./errors";
+
+/**
+ * Read-only access to the repository under review. Implemented by
+ * @gigadrive/lupe-git (local FS + git) and indirectly by the Action.
+ * Backs both the ingest step and the agent's read-only tools.
+ */
+export interface RepoSourceService {
+  /** Acquire the diff for a target (local git range or PR). */
+  readonly acquireDiff: (target: ReviewTarget) => Effect.Effect<readonly DiffFile[], DiffParseError>;
+  /** Read a file from the head checkout. */
+  readonly readFile: (path: string) => Effect.Effect<string, DiffParseError>;
+  /** List directory entries (non-recursive). */
+  readonly listDir: (path: string) => Effect.Effect<readonly string[], DiffParseError>;
+  /** Search the repo for a regex; returns `path:line:text` style matches. */
+  readonly grep: (
+    pattern: string,
+    options?: { readonly glob?: string; readonly maxResults?: number },
+  ) => Effect.Effect<readonly string[], DiffParseError>;
+}
+
+export class RepoSource extends Context.Tag("@gigadrive/lupe-core/RepoSource")<
+  RepoSource,
+  RepoSourceService
+>() {}
+
+/** One anchored inline comment ready to post. */
+export interface AnchoredComment {
+  readonly anchor: Anchor;
+  /** Markdown body (may include a ```suggestion block). */
+  readonly body: string;
+}
+
+export interface PostReviewInput {
+  readonly pr: PullRequestRef;
+  readonly headSha: string;
+  readonly comments: readonly AnchoredComment[];
+  /** Body of the single sticky `<!-- lupe-summary -->` comment. */
+  readonly summaryBody: string;
+  /** Resolve inline threads from prior runs that no longer apply. */
+  readonly resolveStaleThreads: boolean;
+}
+
+/**
+ * GitHub transport. Implemented by @gigadrive/lupe-github. The engine depends
+ * only on this interface, so the CLI (print mode) can omit it entirely.
+ */
+export interface GitHubClientService {
+  /** Per-file patch hunks via paginated `pulls.listFiles`. */
+  readonly listDiff: (pr: PullRequestRef) => Effect.Effect<readonly DiffFile[], GitHubError>;
+  /** Last SHA lupe reviewed, read from the sticky summary marker (incremental review). */
+  readonly getLastReviewedSha: (pr: PullRequestRef) => Effect.Effect<string | undefined, GitHubError>;
+  /** Post ALL findings as one review + upsert the sticky summary. */
+  readonly postReview: (input: PostReviewInput) => Effect.Effect<void, GitHubError>;
+}
+
+export class GitHubClient extends Context.Tag("@gigadrive/lupe-core/GitHubClient")<
+  GitHubClient,
+  GitHubClientService
+>() {}
