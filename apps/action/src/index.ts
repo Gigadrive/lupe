@@ -19,7 +19,7 @@ import {
   type ReviewTarget,
   type Severity,
 } from '@gigadrive/lupe-core';
-import { compressDiff, discoverCodingStandards, RepoSourceLive } from '@gigadrive/lupe-git';
+import { compressDiff, discoverCodingStandards, RepoIndexLive, RepoSourceLive } from '@gigadrive/lupe-git';
 import { anchorFindings, GitHubClientLive } from '@gigadrive/lupe-github';
 
 const FAIL_NONE = 'none';
@@ -135,9 +135,10 @@ const program = Effect.gen(function* () {
   const codingStandards = discoverCodingStandards({ rootDir: workspace, explicit: config.codingStandards });
 
   const repoLayer = RepoSourceLive({ rootDir: workspace });
-  const aiLayer = AiSdkLive({ provider, models, baseURL }).pipe(Layer.provide(repoLayer));
+  const indexLayer = RepoIndexLive({ rootDir: workspace });
+  const aiLayer = AiSdkLive({ provider, models, baseURL }).pipe(Layer.provide(repoLayer), Layer.provide(indexLayer));
   const githubLayer = GitHubClientLive({ token });
-  const layer = Layer.mergeAll(repoLayer, aiLayer, githubLayer);
+  const layer = Layer.mergeAll(aiLayer, githubLayer);
 
   const run = Effect.gen(function* () {
     const gh = yield* GitHubClient;

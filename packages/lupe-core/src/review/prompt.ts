@@ -30,7 +30,8 @@ What to look for (in priority order):
 
 How to work:
 - The user message contains the diff with head line numbers. ONLY comment on lines that appear in the diff.
-- Use the read-only tools (readFile, listDir, grep) to gather surrounding context and confirm a problem before reporting it. Prefer to verify over to speculate.
+- Use the read-only tools (readFile, listDir, grep, findDefinition, findReferences) to gather surrounding context and confirm a problem before reporting it. Prefer to verify over to speculate.
+- When a changed function, class, or symbol seems to have callers/dependencies outside the diff, use findDefinition and findReferences to assess the blast radius.
 - Detect broadly (favor recall), but each reported finding must be something you can defend with concrete evidence from the code. A separate verifier will drop ungrounded findings, so include real "evidence" entries (path + line range) for every finding.
 - Do NOT report: style nits unless they cause bugs, things already handled nearby, hypotheticals not reachable in this code, or pre-existing issues outside the diff.
 

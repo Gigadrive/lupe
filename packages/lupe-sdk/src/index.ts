@@ -19,7 +19,7 @@ import {
   type SarifLog,
   type Severity,
 } from '@gigadrive/lupe-core';
-import { RepoSourceLive, compressDiff, parseUnifiedDiff } from '@gigadrive/lupe-git';
+import { RepoSourceLive, RepoIndexLive, compressDiff, parseUnifiedDiff } from '@gigadrive/lupe-git';
 import { GitHubClientLive, anchorFindings } from '@gigadrive/lupe-github';
 
 export type { Finding, LupeAiConfig, SarifLog, ReviewProfile } from '@gigadrive/lupe-core';
@@ -95,7 +95,9 @@ export interface ReviewDiffOptions extends ReviewTuning {
 export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResult> {
   const rootDir = options.rootDir ?? process.cwd();
   const repoLayer = RepoSourceLive({ rootDir });
-  const layer = AiSdkLive(options.ai).pipe(Layer.provideMerge(repoLayer));
+  const indexLayer = RepoIndexLive({ rootDir });
+  const aiLayerSatisfied = AiSdkLive(options.ai).pipe(Layer.provide(repoLayer), Layer.provide(indexLayer));
+  const layer = Layer.mergeAll(aiLayerSatisfied, repoLayer, indexLayer);
 
   const program = Effect.gen(function* () {
     const acquired =
@@ -166,8 +168,10 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
     number: options.github.number,
   };
   const repoLayer = RepoSourceLive({ rootDir });
+  const indexLayer = RepoIndexLive({ rootDir });
   const githubLayer = GitHubClientLive({ token: options.github.token, baseUrl: options.github.baseUrl });
-  const layer = AiSdkLive(options.ai).pipe(Layer.provideMerge(repoLayer), Layer.provideMerge(githubLayer));
+  const aiLayerSatisfied = AiSdkLive(options.ai).pipe(Layer.provide(repoLayer), Layer.provide(indexLayer));
+  const layer = Layer.mergeAll(aiLayerSatisfied, repoLayer, indexLayer, githubLayer);
 
   const program = Effect.gen(function* () {
     const gh = yield* GitHubClient;

@@ -26,6 +26,31 @@ export interface RepoSourceService {
 
 export class RepoSource extends Context.Tag('@gigadrive/lupe-core/RepoSource')<RepoSource, RepoSourceService>() {}
 
+/** A symbol discovered in the repository (function, class, type, variable, etc.). */
+export interface RepoSymbol {
+  readonly path: string;
+  readonly name: string;
+  readonly kind: 'function' | 'class' | 'interface' | 'type' | 'variable' | 'method' | 'property' | 'unknown';
+  readonly line: number;
+  readonly column?: number;
+}
+
+/** A lightweight, read-only code index used to ground reviews in repo context. */
+export interface RepoIndexService {
+  /** Find the definition(s) of a symbol by name (optionally scoped to a path). */
+  readonly findDefinitions: (
+    name: string,
+    options?: { readonly path?: string; readonly maxResults?: number }
+  ) => Effect.Effect<readonly RepoSymbol[], DiffParseError>;
+  /** Find references to a symbol across the repo (optionally scoped to a path). */
+  readonly findReferences: (
+    name: string,
+    options?: { readonly path?: string; readonly maxResults?: number }
+  ) => Effect.Effect<readonly string[], DiffParseError>;
+}
+
+export class RepoIndex extends Context.Tag('@gigadrive/lupe-core/RepoIndex')<RepoIndex, RepoIndexService>() {}
+
 /** One anchored inline comment ready to post. */
 export interface AnchoredComment {
   readonly anchor: Anchor;

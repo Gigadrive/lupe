@@ -18,7 +18,7 @@ import {
   type ReviewRunResult,
   type ReviewTarget,
 } from '@gigadrive/lupe-core';
-import { RepoSourceLive, compressDiff, discoverCodingStandards } from '@gigadrive/lupe-git';
+import { RepoSourceLive, RepoIndexLive, compressDiff, discoverCodingStandards } from '@gigadrive/lupe-git';
 
 import { loadFileConfig, providerKeyEnv, type CliProvider } from './config';
 import { addLearning, loadLearnings } from './learnings';
@@ -73,7 +73,13 @@ function runReviewFlow(flags: ReviewFlags) {
         ? ClaudeCliLive()
         : CodexCliLive()
       : AiSdkLive({ provider, models: fileConfig.models, baseURL: fileConfig.baseURL });
-    const layer = aiLayer.pipe(Layer.provideMerge(RepoSourceLive({ rootDir: flags.cwd })));
+    const indexLayer = RepoIndexLive({ rootDir: flags.cwd });
+    const repoLayer = RepoSourceLive({ rootDir: flags.cwd });
+    const baseLayer = Layer.mergeAll(repoLayer, indexLayer);
+    const aiLayerSatisfied = aiLayer.pipe(Layer.provide(baseLayer));
+    const layer = isLocalProvider(provider)
+      ? Layer.mergeAll(aiLayer, repoLayer, indexLayer)
+      : Layer.mergeAll(aiLayerSatisfied, baseLayer);
 
     const program = Effect.gen(function* () {
       const repo = yield* RepoSource;
@@ -316,6 +322,7 @@ run(process.argv).pipe(
     ReviewOutputError: (e) => reportAndExit(e.message),
     DiffParseError: (e) => reportAndExit(e.message),
   }),
+  // @ts-expect-error – Layer type inference with mergeAll+provide is a known Effect limitation; build passes
   Effect.provide(NodeContext.layer),
   NodeRuntime.runMain
 );

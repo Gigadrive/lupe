@@ -1,10 +1,10 @@
 import { generateText, Output, stepCountIs } from 'ai';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Option } from 'effect';
 import { z } from 'zod';
 
 import { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from '../errors';
 import { Finding } from '../finding';
-import { RepoSource } from '../ports';
+import { RepoIndex, RepoSource } from '../ports';
 import {
   AiModel,
   type AiError,
@@ -51,14 +51,17 @@ const VerifySchema = z.object({
  * The v1 concrete AiModel Layer — wraps the Vercel AI SDK. The engine depends
  * only on the AiModel tag, so adopting @effect/ai later is a Layer swap.
  *
- * Requires RepoSource (for the agent's read-only tools).
+ * Requires RepoSource (for the agent's read-only tools). RepoIndex is optional:
+ * when provided, the agent gets findDefinition / findReferences tools.
  */
-export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, RepoSource> {
+export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, RepoSource | RepoIndex> {
   return Layer.effect(
     AiModel,
     Effect.gen(function* () {
       const repo = yield* RepoSource;
-      const tools = buildRepoTools(repo);
+      const indexOption = yield* Effect.serviceOption(RepoIndex);
+      const index = Option.getOrUndefined(indexOption);
+      const tools = buildRepoTools(repo, index);
       const resolveModel = createModelResolver(config);
       const cacheable = config.provider === 'anthropic';
 

@@ -7,3 +7,4 @@ export * from './anchor';
 export * from './compress';
 export * from './standards';
 export * from './repo-source';
+export * from './repo-index';

@@ -1,7 +1,7 @@
 import { Effect, Layer } from 'effect';
 import { describe, expect, test } from 'vitest';
 
-import { AiSdkLive, RepoSource, generateCandidates, type RepoSourceService } from '@gigadrive/lupe-core';
+import { AiSdkLive, RepoSource, RepoIndex, generateCandidates, type RepoSourceService } from '@gigadrive/lupe-core';
 import { parseUnifiedDiff } from '@gigadrive/lupe-git';
 
 /**
@@ -28,6 +28,11 @@ const fakeRepo: RepoSourceService = {
   grep: () => Effect.succeed([]),
 };
 
+const fakeIndex: Layer.Layer<RepoIndex> = Layer.succeed(RepoIndex, {
+  findDefinitions: () => Effect.succeed([]),
+  findReferences: () => Effect.succeed([]),
+});
+
 describe('Anthropic prompt cache (live)', () => {
   test.skipIf(!hasKey)(
     'second identical call reads the cached prefix',
@@ -36,8 +41,10 @@ describe('Anthropic prompt cache (live)', () => {
       // Pad the cacheable system prefix well past the 4096-token Haiku minimum.
       const codingStandards = 'Always prefer immutable data and parameterised queries. '.repeat(1500);
 
+      const repoLayer = Layer.succeed(RepoSource, fakeRepo);
       const layer = AiSdkLive({ provider: 'anthropic', models: { review: 'claude-haiku-4-5' } }).pipe(
-        Layer.provide(Layer.succeed(RepoSource, fakeRepo))
+        Layer.provide(repoLayer),
+        Layer.provide(fakeIndex)
       );
 
       const program = generateCandidates(files, undefined, {
