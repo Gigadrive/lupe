@@ -17,7 +17,8 @@
     "@gigadrive/lupe-core": "workspace:*",
     "@gigadrive/lupe-git": "workspace:*",
     "@gigadrive/lupe-github": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

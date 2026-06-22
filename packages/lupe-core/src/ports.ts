@@ -50,6 +50,16 @@ export interface PostReviewInput {
 export interface GitHubClientService {
   /** Per-file patch hunks via paginated `pulls.listFiles`. */
   readonly listDiff: (pr: PullRequestRef) => Effect.Effect<readonly DiffFile[], GitHubError>;
+  /**
+   * Per-file patch hunks for just `baseSha..headSha` (incremental re-review via
+   * the compare API). Fails (so the caller can fall back to {@link listDiff})
+   * when the comparison is not a clean fast-forward — e.g. a force-push/rebase.
+   */
+  readonly listDiffSince: (
+    pr: PullRequestRef,
+    baseSha: string,
+    headSha: string
+  ) => Effect.Effect<readonly DiffFile[], GitHubError>;
   /** Last SHA lupe reviewed, read from the sticky summary marker (incremental review). */
   readonly getLastReviewedSha: (pr: PullRequestRef) => Effect.Effect<string | undefined, GitHubError>;
   /** Post ALL findings as one review + upsert the sticky summary. */

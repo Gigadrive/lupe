@@ -128,7 +128,8 @@ export function renderSummaryMarkdown(findings: readonly Finding[], options: Sum
     out.push('');
     for (const f of sortFindings(findings)) {
       const loc = `\`${f.path}:${f.startLine}\``;
-      out.push(`- ${SEVERITY_EMOJI[f.severity]} ${loc} — ${f.title} <sub>(${f.category})</sub>`);
+      const pct = Math.round(f.confidence * 100);
+      out.push(`- ${SEVERITY_EMOJI[f.severity]} ${loc} — ${f.title} <sub>(${f.category} · ${pct}%)</sub>`);
     }
     out.push('');
     out.push('</details>');

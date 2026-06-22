@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { AnchoredComment } from '@gigadrive/lupe-core';
 
-import { toReviewComment } from './client';
+import { compareToDiffFiles, toReviewComment } from './client';
 
 describe('toReviewComment', () => {
   test('maps a single-line anchor to line+side (no start_line)', () => {
@@ -31,5 +31,29 @@ describe('toReviewComment', () => {
       body: 'x',
     };
     expect(toReviewComment(c).start_side).toBe('LEFT');
+  });
+});
+
+describe('compareToDiffFiles (incremental review)', () => {
+  test('maps files on a clean fast-forward ("ahead")', () => {
+    const files = compareToDiffFiles({
+      status: 'ahead',
+      files: [{ filename: 'a.ts', status: 'modified', patch: '@@ -1 +1 @@\n-old\n+new' }],
+    });
+    expect(files).toHaveLength(1);
+    expect(files[0]!.path).toBe('a.ts');
+  });
+
+  test('returns an empty set when ahead with no files', () => {
+    expect(compareToDiffFiles({ status: 'ahead', files: [] })).toEqual([]);
+  });
+
+  test('throws on a diverged comparison (rebase/force-push) so the caller falls back to the full diff', () => {
+    expect(() => compareToDiffFiles({ status: 'diverged', files: [] })).toThrow(/not fast-forward/);
+    expect(() => compareToDiffFiles({ status: 'behind', files: [] })).toThrow(/not fast-forward/);
+  });
+
+  test('throws when files are absent', () => {
+    expect(() => compareToDiffFiles({ status: 'ahead' })).toThrow(/not fast-forward/);
   });
 });
