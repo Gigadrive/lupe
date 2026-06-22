@@ -1,5 +1,5 @@
 import type { DiffFile } from '@gigadrive/lupe-core';
-import { renderDiffPrompt, serialiseFileDiff } from '@gigadrive/lupe-core';
+import { globToRegExp, renderDiffPrompt, serialiseFileDiff } from '@gigadrive/lupe-core';
 
 // Re-export the core serialisers so consumers can keep importing them from here.
 export { renderDiffPrompt, serialiseFileDiff };
@@ -68,27 +68,6 @@ export function matchesFilters(path: string, filters: readonly string[]): boolea
     if (globToRegExp(pattern).test(path)) included = !negated;
   }
   return included;
-}
-
-function globToRegExp(glob: string): RegExp {
-  // Minimal glob: ** => any, * => segment, ? => one char. Anchored loosely.
-  let re = '';
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i]!;
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        re += '.*';
-        i++;
-        if (glob[i + 1] === '/') i++;
-      } else {
-        re += '[^/]*';
-      }
-    } else if (c === '?') re += '[^/]';
-    else if ('.+^${}()|[]\\'.includes(c)) re += `\\${c}`;
-    else if (c === '/') re += '/';
-    else re += c;
-  }
-  return new RegExp(`(^|/)${re}$|^${re}$`);
 }
 
 export type DropReason = 'binary' | 'generated' | 'lockfile' | 'filtered' | 'no-hunks' | 'budget';

@@ -131,6 +131,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 3.21.4
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
     devDependencies:
       '@repo/typescript-config':
         specifier: workspace:*

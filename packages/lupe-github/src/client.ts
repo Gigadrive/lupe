@@ -42,6 +42,36 @@ function toGitHubError(cause: unknown): GitHubError {
   return new GitHubError({ message, status, cause });
 }
 
+/** The `compareCommitsWithBasehead` fields we depend on (narrowed for testability). */
+export interface CompareResult {
+  readonly status: string;
+  readonly files?: ReadonlyArray<{
+    readonly filename: string;
+    readonly previous_filename?: string | null;
+    readonly status: string;
+    readonly patch?: string;
+  }>;
+}
+
+/**
+ * Map a compare result to DiffFiles, trusting it ONLY when it is a clean
+ * fast-forward ("ahead"). Throws otherwise so the incremental caller falls back
+ * to the full diff — a rebase/force-push yields "diverged"/"behind".
+ */
+export function compareToDiffFiles(data: CompareResult): DiffFile[] {
+  if (data.status !== 'ahead' || !data.files) {
+    throw new Error(`incremental compare not fast-forward (status: ${data.status})`);
+  }
+  return data.files.map((f) =>
+    buildDiffFile({
+      filename: f.filename,
+      previousFilename: f.previous_filename ?? undefined,
+      status: f.status,
+      patch: f.patch,
+    })
+  );
+}
+
 const THREADS_QUERY = `query($owner:String!,$repo:String!,$num:Int!,$cursor:String){
   repository(owner:$owner,name:$repo){
     pullRequest(number:$num){
@@ -127,6 +157,24 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
+  const listDiffSince = (
+    pr: PullRequestRef,
+    baseSha: string,
+    headSha: string
+  ): Effect.Effect<readonly DiffFile[], GitHubError> =>
+    Effect.tryPromise({
+      try: async () => {
+        const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
+          owner: pr.owner,
+          repo: pr.repo,
+          basehead: `${baseSha}...${headSha}`,
+          per_page: 100,
+        });
+        return compareToDiffFiles(data);
+      },
+      catch: toGitHubError,
+    });
+
   const getLastReviewedSha = (pr: PullRequestRef): Effect.Effect<string | undefined, GitHubError> =>
     Effect.tryPromise({
       try: async () => {
@@ -175,7 +223,7 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
-  return { listDiff, getLastReviewedSha, postReview };
+  return { listDiff, listDiffSince, getLastReviewedSha, postReview };
 }
 
 /** Effect Layer providing the GitHub transport for a token. */

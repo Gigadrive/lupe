@@ -10,14 +10,14 @@ inputs:
     description: 'Token used to read the PR and post review comments.'
     default: ${{ github.token }}
   provider:
-    description: 'Model provider: anthropic | openai | google | bedrock | openai-compatible | gateway'
-    default: 'anthropic'
+    description: 'Model provider: anthropic | openai | google | bedrock | openai-compatible | gateway. Overrides .lupe.yaml; falls back to anthropic.'
+    default: ''
   models:
-    description: 'JSON map of task→model id, e.g. {"review":"claude-opus-4-8"}'
+    description: 'JSON map of task→model id, e.g. {"review":"claude-opus-4-8"}. Overrides .lupe.yaml.'
     default: ''
   profile:
-    description: 'Review profile: chill | assertive'
-    default: 'chill'
+    description: 'Review profile: chill | assertive. Overrides .lupe.yaml; defaults to chill.'
+    default: ''
   base-url:
     description: 'Custom base URL (for openai-compatible / gateway).'
     default: ''
@@ -26,6 +26,15 @@ inputs:
     default: ''
   max-findings:
     description: 'Maximum number of findings to keep.'
+    default: ''
+  confidence-threshold:
+    description: 'Global confidence floor (0..1) for keeping a finding. Overrides .lupe.yaml.'
+    default: ''
+  suppress-advisory:
+    description: 'Drop advisory (style/docs/test/maintainability) findings entirely: true | false.'
+    default: ''
+  min-severity-to-comment:
+    description: 'Only post inline comments for findings at/above this severity (rest stay in the summary): critical | high | medium | low | info.'
     default: ''
   thorough:
     description: 'Use the strongest model and extra passes.'

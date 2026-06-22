@@ -18,7 +18,7 @@ import {
   type ReviewRunResult,
   type ReviewTarget,
 } from '@gigadrive/lupe-core';
-import { RepoSourceLive, compressDiff } from '@gigadrive/lupe-git';
+import { RepoSourceLive, compressDiff, discoverCodingStandards } from '@gigadrive/lupe-git';
 
 import { loadFileConfig, providerKeyEnv, type CliProvider } from './config';
 import { addLearning, loadLearnings } from './learnings';
@@ -64,6 +64,7 @@ function runReviewFlow(flags: ReviewFlags) {
   return Effect.gen(function* () {
     const fileConfig = yield* loadFileConfig(flags.cwd);
     const learnings = yield* loadLearnings(flags.cwd);
+    const codingStandards = discoverCodingStandards({ rootDir: flags.cwd, explicit: fileConfig.codingStandards });
     const provider: CliProvider = flags.provider ?? fileConfig.provider ?? 'anthropic';
     const target: ReviewTarget = { kind: 'local', baseRef: flags.base, headRef: flags.head };
 
@@ -90,8 +91,12 @@ function runReviewFlow(flags: ReviewFlags) {
       yield* Console.error(colors.gray(`Reviewing ${compressed.files.length} file(s) with ${provider}…`));
       const result = yield* runReview(compressed.files, target, {
         profile: flags.profile ?? fileConfig.profile,
+        codingStandards,
         pathInstructions: fileConfig.pathInstructions,
         confidenceThreshold: fileConfig.confidenceThreshold,
+        categoryThresholds: fileConfig.categoryThresholds,
+        pathThresholds: fileConfig.pathThresholds,
+        suppressAdvisory: fileConfig.suppressAdvisory,
         maxFindings: flags.maxFindings ?? fileConfig.maxFindings,
         maxChunkTokens: fileConfig.maxChunkTokens,
         maxChunks: fileConfig.maxChunks,

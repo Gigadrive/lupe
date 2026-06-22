@@ -1,19 +1,26 @@
+import { existsSync, readFileSync } from 'node:fs';
+import * as nodePath from 'node:path';
+
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Effect, Layer } from 'effect';
+import { parse as parseYaml } from 'yaml';
 
 import {
   AiSdkLive,
+  findingsForInlineComment,
   GitHubClient,
-  SEVERITY_RANK,
+  normalizeConfig,
   runReview,
+  SEVERITY_RANK,
   type ApiProviderId,
+  type LupeConfig,
   type ReviewProfile,
   type ReviewTarget,
   type Severity,
 } from '@gigadrive/lupe-core';
-import { RepoSourceLive, compressDiff } from '@gigadrive/lupe-git';
-import { GitHubClientLive, anchorFindings } from '@gigadrive/lupe-github';
+import { compressDiff, discoverCodingStandards, RepoSourceLive } from '@gigadrive/lupe-git';
+import { anchorFindings, GitHubClientLive } from '@gigadrive/lupe-github';
 
 const FAIL_NONE = 'none';
 
@@ -22,6 +29,29 @@ function intInput(name: string): number | undefined {
   if (!raw) return undefined;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function numInput(name: string): number | undefined {
+  const raw = core.getInput(name);
+  if (!raw) return undefined;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function boolInput(name: string): boolean | undefined {
+  const raw = core.getInput(name).trim().toLowerCase();
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return undefined;
+}
+
+function severityInput(name: string): Severity | undefined {
+  const raw = core.getInput(name).trim().toLowerCase();
+  return raw && raw in SEVERITY_RANK ? (raw as Severity) : undefined;
+}
+
+function parseProfile(raw: string): ReviewProfile | undefined {
+  return raw === 'assertive' ? 'assertive' : raw === 'chill' ? 'chill' : undefined;
 }
 
 function parseModels(raw: string): Record<string, string> | undefined {
@@ -33,6 +63,22 @@ function parseModels(raw: string): Record<string, string> | undefined {
     core.warning(`lupe: could not parse "models" input as JSON; ignoring.`);
     return undefined;
   }
+}
+
+/** Read a repo-committed `.lupe.yaml` from the checkout; Action inputs override it. */
+function loadActionConfig(workspace: string): LupeConfig {
+  for (const name of ['.lupe.yaml', '.lupe.yml']) {
+    const file = nodePath.join(workspace, name);
+    if (!existsSync(file)) continue;
+    try {
+      const parsed = parseYaml(readFileSync(file, 'utf8'));
+      return normalizeConfig((parsed as Record<string, unknown> | null) ?? {});
+    } catch (error) {
+      core.warning(`lupe: failed to parse ${name}; ignoring. ${error instanceof Error ? error.message : ''}`);
+      return normalizeConfig({});
+    }
+  }
+  return normalizeConfig({});
 }
 
 const program = Effect.gen(function* () {
@@ -66,22 +112,27 @@ const program = Effect.gen(function* () {
     return;
   }
 
-  const provider = (core.getInput('provider') || 'anthropic') as ApiProviderId;
-  const profileIn = core.getInput('profile');
-  const profile: ReviewProfile | undefined =
-    profileIn === 'assertive' ? 'assertive' : profileIn === 'chill' ? 'chill' : undefined;
-  const models = parseModels(core.getInput('models'));
-  const baseURL = core.getInput('base-url') || undefined;
-  const maxFiles = intInput('max-files');
-  const maxFindings = intInput('max-findings');
-  const maxChunkTokens = intInput('max-chunk-tokens');
-  const maxChunks = intInput('max-chunks');
-  const reviewConcurrency = intInput('review-concurrency');
-  const thorough = (core.getInput('thorough') || 'false') === 'true';
-  const failOn = (core.getInput('fail-on-severity') || FAIL_NONE).toLowerCase();
-
   const prRef = { owner, repo, number };
   const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
+
+  // `.lupe.yaml` from the checked-out repo is the base; explicit Action inputs win.
+  const config = loadActionConfig(workspace);
+
+  const provider = (core.getInput('provider') || config.provider || 'anthropic') as ApiProviderId;
+  const profile: ReviewProfile | undefined = parseProfile(core.getInput('profile')) ?? config.profile;
+  const models = parseModels(core.getInput('models')) ?? config.models;
+  const baseURL = core.getInput('base-url') || config.baseURL || undefined;
+  const maxFiles = intInput('max-files') ?? config.maxFiles;
+  const maxFindings = intInput('max-findings') ?? config.maxFindings;
+  const confidenceThreshold = numInput('confidence-threshold') ?? config.confidenceThreshold;
+  const suppressAdvisory = boolInput('suppress-advisory') ?? config.suppressAdvisory;
+  const minSeverityToComment = severityInput('min-severity-to-comment') ?? config.minSeverityToComment;
+  const maxChunkTokens = intInput('max-chunk-tokens') ?? config.maxChunkTokens;
+  const maxChunks = intInput('max-chunks') ?? config.maxChunks;
+  const reviewConcurrency = intInput('review-concurrency') ?? config.reviewConcurrency;
+  const thorough = (core.getInput('thorough') || 'false') === 'true';
+  const failOn = (core.getInput('fail-on-severity') || FAIL_NONE).toLowerCase();
+  const codingStandards = discoverCodingStandards({ rootDir: workspace, explicit: config.codingStandards });
 
   const repoLayer = RepoSourceLive({ rootDir: workspace });
   const aiLayer = AiSdkLive({ provider, models, baseURL }).pipe(Layer.provide(repoLayer));
@@ -91,8 +142,18 @@ const program = Effect.gen(function* () {
   const run = Effect.gen(function* () {
     const gh = yield* GitHubClient;
     const lastReviewedSha = yield* gh.getLastReviewedSha(prRef);
-    const files = yield* gh.listDiff(prRef);
-    const compressed = compressDiff(files, { maxFilesReviewed: maxFiles, chunk: true });
+    // Incremental: only review commits since the last reviewed SHA. Fall back to
+    // the full diff on the first review or any non-fast-forward (rebase/force-push).
+    const incremental = lastReviewedSha !== undefined && lastReviewedSha !== headSha;
+    const files = incremental
+      ? yield* gh.listDiffSince(prRef, lastReviewedSha, headSha).pipe(Effect.catchAll(() => gh.listDiff(prRef)))
+      : yield* gh.listDiff(prRef);
+    if (incremental) core.info(`lupe: incremental review since ${lastReviewedSha.slice(0, 7)}.`);
+    const compressed = compressDiff(files, {
+      pathFilters: config.pathFilters,
+      maxFilesReviewed: maxFiles,
+      chunk: true,
+    });
     if (compressed.files.length === 0) {
       core.info('lupe: no reviewable changes.');
       return;
@@ -112,6 +173,12 @@ const program = Effect.gen(function* () {
 
     const result = yield* runReview(compressed.files, target, {
       profile,
+      codingStandards,
+      pathInstructions: config.pathInstructions,
+      confidenceThreshold,
+      categoryThresholds: config.categoryThresholds,
+      pathThresholds: config.pathThresholds,
+      suppressAdvisory,
       maxFindings,
       maxChunkTokens,
       maxChunks,
@@ -120,7 +187,8 @@ const program = Effect.gen(function* () {
       task: thorough ? 'deep' : 'review',
     });
 
-    const { comments, unanchored } = anchorFindings(result.findings, compressed.files);
+    const inline = findingsForInlineComment(result.findings, minSeverityToComment);
+    const { comments, unanchored } = anchorFindings(inline, compressed.files);
     yield* gh.postReview({
       pr: prRef,
       headSha,

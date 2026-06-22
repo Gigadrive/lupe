@@ -6,72 +6,15 @@ import { loadConfig } from 'c12';
 import { Effect } from 'effect';
 import { parse as parseYaml } from 'yaml';
 
-import { ConfigError, type ApiProviderId } from '@gigadrive/lupe-core';
+import { ConfigError, normalizeConfig, type ApiProviderId, type LupeConfig } from '@gigadrive/lupe-core';
 
 /** CLI providers = AI-SDK providers plus the opt-in local-credential backends. */
 export type CliProvider = ApiProviderId | 'claude-cli' | 'codex-cli';
 
-interface PathInstructionConfig {
-  readonly path: string;
-  readonly instructions: string;
-}
-
-/** Normalised lupe config (from `.lupe.yaml` or `lupe.config.*`). */
-export interface LupeFileConfig {
-  readonly profile?: 'chill' | 'assertive';
-  readonly provider?: CliProvider;
-  readonly models?: Record<string, string>;
-  readonly baseURL?: string;
-  readonly pathFilters?: readonly string[];
-  readonly pathInstructions?: readonly PathInstructionConfig[];
-  readonly maxFiles?: number;
-  readonly maxFindings?: number;
-  readonly confidenceThreshold?: number;
-  readonly maxChunkTokens?: number;
-  readonly maxChunks?: number;
-  readonly reviewConcurrency?: number;
-}
+/** Normalised lupe config for the CLI — core's shared `LupeConfig` with the provider narrowed. */
+export type LupeFileConfig = Omit<LupeConfig, 'provider'> & { readonly provider?: CliProvider };
 
 type RawConfig = Record<string, unknown>;
-
-function pickArray<T>(value: unknown): T[] | undefined {
-  return Array.isArray(value) ? (value as T[]) : undefined;
-}
-
-function pickNumber(value: unknown): number | undefined {
-  return typeof value === 'number' ? value : undefined;
-}
-
-function pickString(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
-}
-
-/** Accept both snake_case (yaml) and camelCase keys. */
-function normalize(raw: RawConfig): LupeFileConfig {
-  const get = (...keys: string[]): unknown => {
-    for (const k of keys) if (raw[k] !== undefined) return raw[k];
-    return undefined;
-  };
-
-  const profile = pickString(get('profile'));
-  const provider = pickString(get('provider'));
-  const models = (get('models') as Record<string, string> | undefined) ?? undefined;
-
-  return {
-    profile: profile === 'assertive' ? 'assertive' : profile === 'chill' ? 'chill' : undefined,
-    provider: provider as CliProvider | undefined,
-    models,
-    baseURL: pickString(get('baseURL', 'base_url')),
-    pathFilters: pickArray<string>(get('pathFilters', 'path_filters')),
-    pathInstructions: pickArray<PathInstructionConfig>(get('pathInstructions', 'path_instructions')),
-    maxFiles: pickNumber(get('maxFiles', 'max_files')),
-    maxFindings: pickNumber(get('maxFindings', 'max_findings')),
-    confidenceThreshold: pickNumber(get('confidenceThreshold', 'confidence_threshold')),
-    maxChunkTokens: pickNumber(get('maxChunkTokens', 'max_chunk_tokens')),
-    maxChunks: pickNumber(get('maxChunks', 'max_chunks')),
-    reviewConcurrency: pickNumber(get('reviewConcurrency', 'review_concurrency')),
-  };
-}
 
 async function loadRaw(cwd: string): Promise<RawConfig> {
   for (const name of ['.lupe.yaml', '.lupe.yml']) {
@@ -88,7 +31,10 @@ async function loadRaw(cwd: string): Promise<RawConfig> {
 /** Load + normalise the layered config for a working directory. */
 export function loadFileConfig(cwd: string): Effect.Effect<LupeFileConfig, ConfigError> {
   return Effect.tryPromise({
-    try: async () => normalize(await loadRaw(cwd)),
+    try: async () => {
+      const base = normalizeConfig(await loadRaw(cwd));
+      return { ...base, provider: base.provider as CliProvider | undefined };
+    },
     catch: (cause) => new ConfigError({ message: 'failed to load lupe config', cause }),
   });
 }

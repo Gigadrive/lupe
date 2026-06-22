@@ -117,6 +117,17 @@ export function isAdvisory(finding: Pick<Finding, 'category'>): boolean {
   return ADVISORY_CATEGORIES.has(finding.category);
 }
 
+/**
+ * Findings eligible to be posted as inline comments — those at or above
+ * `minSeverity` (a transport gate distinct from the publication filter). With
+ * no threshold, all findings are eligible; the rest stay summary-only.
+ */
+export function findingsForInlineComment(findings: readonly Finding[], minSeverity?: Severity): readonly Finding[] {
+  if (minSeverity === undefined) return findings;
+  const ceiling = SEVERITY_RANK[minSeverity];
+  return findings.filter((f) => SEVERITY_RANK[f.severity] <= ceiling);
+}
+
 /** Normalise a free-form ruleId into the canonical `lupe/<category>/<slug>` shape. */
 export function canonicalRuleId(category: Category, ruleId: string): string {
   if (ruleId.startsWith('lupe/')) return ruleId;

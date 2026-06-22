@@ -4,15 +4,20 @@ import {
   AiSdkLive,
   GitHubClient,
   RepoSource,
+  findingsForInlineComment,
   renderSarif,
   runReview,
+  type Category,
+  type CategoryThreshold,
   type CostSummary,
   type Finding,
   type LupeAiConfig,
+  type PathThreshold,
   type PullRequestRef,
   type ReviewProfile,
   type ReviewTarget,
   type SarifLog,
+  type Severity,
 } from '@gigadrive/lupe-core';
 import { RepoSourceLive, compressDiff, parseUnifiedDiff } from '@gigadrive/lupe-git';
 import { GitHubClientLive, anchorFindings } from '@gigadrive/lupe-github';
@@ -27,6 +32,16 @@ export interface ReviewTuning {
   readonly maxFiles?: number;
   readonly maxFindings?: number;
   readonly confidenceThreshold?: number;
+  /** Per-category confidence/severity gates (override the global confidence floor). */
+  readonly categoryThresholds?: Partial<Record<Category, CategoryThreshold>>;
+  /** Per-path-glob gates (highest precedence). */
+  readonly pathThresholds?: readonly PathThreshold[];
+  /** Drop advisory (style/docs/test/maintainability) findings entirely. */
+  readonly suppressAdvisory?: boolean;
+  /** Repo coding standards / conventions injected into the prompt prefix. */
+  readonly codingStandards?: string;
+  /** Inline-comment gate (PR posting): findings less severe than this stay summary-only. */
+  readonly minSeverityToComment?: Severity;
   /** Run the grounding verifier (default true). */
   readonly verify?: boolean;
   /** Use the strongest model + extra passes. */
@@ -107,8 +122,12 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
     };
     const result = yield* runReview(compressed.files, target, {
       profile: options.profile,
+      codingStandards: options.codingStandards,
       maxFindings: options.maxFindings,
       confidenceThreshold: options.confidenceThreshold,
+      categoryThresholds: options.categoryThresholds,
+      pathThresholds: options.pathThresholds,
+      suppressAdvisory: options.suppressAdvisory,
       maxChunkTokens: options.maxChunkTokens,
       maxChunks: options.maxChunks,
       reviewConcurrency: options.reviewConcurrency,
@@ -167,8 +186,12 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
       { kind: 'pull_request', repo: pr, pullNumber: pr.number, headSha: options.headSha },
       {
         profile: options.profile,
+        codingStandards: options.codingStandards,
         maxFindings: options.maxFindings,
         confidenceThreshold: options.confidenceThreshold,
+        categoryThresholds: options.categoryThresholds,
+        pathThresholds: options.pathThresholds,
+        suppressAdvisory: options.suppressAdvisory,
         maxChunkTokens: options.maxChunkTokens,
         maxChunks: options.maxChunks,
         reviewConcurrency: options.reviewConcurrency,
@@ -179,7 +202,8 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
 
     let posted = false;
     if (options.post && options.headSha) {
-      const { comments } = anchorFindings(result.findings, compressed.files);
+      const inline = findingsForInlineComment(result.findings, options.minSeverityToComment);
+      const { comments } = anchorFindings(inline, compressed.files);
       yield* gh.postReview({
         pr,
         headSha: options.headSha,

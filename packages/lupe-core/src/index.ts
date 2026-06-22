@@ -7,6 +7,8 @@ export * from './finding';
 export * from './diff';
 export * from './review';
 export * from './errors';
+export * from './glob';
+export * from './config';
 
 // Ports (interfaces the engine depends on; implemented by adapters)
 export * from './ports';
