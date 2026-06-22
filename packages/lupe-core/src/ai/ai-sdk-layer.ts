@@ -3,12 +3,14 @@ import { Effect, Layer } from 'effect';
 import { z } from 'zod';
 
 import { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from '../errors';
-import { Finding } from '../finding';
+import { DescriptionSchema, Finding } from '../finding';
 import { RepoSource } from '../ports';
 import {
   AiModel,
   type AiError,
   type AiModelService,
+  type GenerateDescriptionInput,
+  type GenerateDescriptionResult,
   type GenerateFindingsInput,
   type GenerateFindingsResult,
   type VerifyInput,
@@ -130,7 +132,30 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
           catch: (error) => liftError(error, config.provider),
         });
 
-      const service: AiModelService = { generateFindings, verify };
+      const generateDescription = (
+        input: GenerateDescriptionInput
+      ): Effect.Effect<GenerateDescriptionResult, AiError> =>
+        Effect.tryPromise({
+          try: async () => {
+            const { model, modelId } = resolveModel(input.task);
+            const result = await generateText({
+              model,
+              messages: [systemMessage(input.system), { role: 'user', content: input.prompt }],
+              output: Output.object({ schema: DescriptionSchema }),
+              allowSystemInMessages: true,
+              maxRetries: 2,
+            });
+            const desc = result.output as z.infer<typeof DescriptionSchema>;
+            return {
+              description: desc,
+              usage: toTokenUsage(result.totalUsage),
+              model: modelId,
+            };
+          },
+          catch: (error) => liftError(error, config.provider),
+        });
+
+      const service: AiModelService = { generateFindings, verify, generateDescription };
       return service;
     })
   );

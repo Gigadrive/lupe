@@ -45,6 +45,18 @@ function fakeAi(candidates: readonly Finding[]): Layer.Layer<AiModel> {
         usage: EMPTY_USAGE,
         model: 'fake-verify',
       }),
+    generateDescription: ({ prompt }) =>
+      Effect.succeed({
+        description: {
+          title: 'Generated PR',
+          summary: prompt.slice(0, 50),
+          type: 'feat',
+          breaking: false,
+          testsWritten: false,
+        },
+        usage: EMPTY_USAGE,
+        model: 'fake-describe',
+      }),
   };
   return Layer.succeed(AiModel, service);
 }
@@ -76,6 +88,18 @@ function capturingAi(
         reason: '',
         usage: EMPTY_USAGE,
         model: 'fake-verify',
+      }),
+    generateDescription: ({ prompt }) =>
+      Effect.succeed({
+        description: {
+          title: 'Generated PR',
+          summary: prompt.slice(0, 50),
+          type: 'feat',
+          breaking: false,
+          testsWritten: false,
+        },
+        usage: EMPTY_USAGE,
+        model: 'fake-describe',
       }),
   };
   return { layer: Layer.succeed(AiModel, service), systems };

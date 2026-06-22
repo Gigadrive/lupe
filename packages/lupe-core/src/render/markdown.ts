@@ -1,4 +1,4 @@
-import type { Finding, Severity } from '../finding';
+import type { Description, Finding, Severity } from '../finding';
 import { SEVERITY_RANK, isAdvisory } from '../finding';
 import type { CostSummary } from '../review';
 
@@ -194,6 +194,44 @@ export function renderTerminal(findings: readonly Finding[]): string {
       out.push(f.suggestion.replace(/^/gm, '    '));
     }
     out.push('');
+  }
+  return out.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+
+const TYPE_EMOJI: Record<string, string> = {
+  feat: '✨',
+  fix: '🐛',
+  refactor: '♻️',
+  docs: '📖',
+  test: '✅',
+  chore: '🔧',
+  perf: '⚡',
+  ci: '👷',
+  deps: '📦',
+};
+
+/** Render a generated PR description as a GitHub-compatible markdown string. */
+export function renderDescription(description: Description): string {
+  const emoji = TYPE_EMOJI[description.type] ?? '📝';
+  const breaking = description.breaking ? '⚠️ **Breaking**' : null;
+
+  const out: string[] = [];
+  out.push(`## ${emoji} ${description.title}`);
+  out.push('');
+  out.push(description.summary);
+  out.push('');
+  out.push('| | |');
+  out.push('| --- | --- |');
+  out.push(`| Type | ${description.type} |`);
+  if (breaking) out.push(`| ${breaking} | yes |`);
+  out.push(`| Tests written | ${description.testsWritten ? 'yes' : 'no'} |`);
+  if (description.notes) {
+    out.push('');
+    out.push('### Notes');
+    out.push('');
+    out.push(description.notes);
   }
   return out.join('\n');
 }

@@ -83,3 +83,43 @@ export function buildReviewPrompt(files: readonly DiffFile[], target?: ReviewTar
   parts.push(renderDiffPrompt(files));
   return parts.join('\n\n');
 }
+
+// ---------------------------------------------------------------------------
+
+const DESCRIPTION_SYSTEM = `You are lupe, an AI assistant that generates precise, informative pull-request descriptions.
+
+Given a diff, your task is to produce a well-structured PR description that helps reviewers understand:
+- What changed and why
+- The type of change (feature, bugfix, refactor, etc.)
+- Whether it's breaking
+- Whether tests were added/updated
+- Any notes for reviewers
+
+Be concise and specific. Avoid generic templates. Base everything on the actual diff.
+
+Output a JSON object with these fields:
+- title: A short, descriptive PR title (under 80 chars, no "#" prefix)
+- summary: A 2-3 sentence summary of what changed and why
+- type: One of: feat, fix, refactor, docs, test, chore, perf, ci, deps
+- breaking: true if this introduces a breaking change, false otherwise
+- testsWritten: true if tests were added or meaningfully updated
+- notes: (optional) any edge cases, tradeoffs, or things reviewers should know`;
+
+export function buildDescriptionSystemPrompt(options: PromptOptions = {}): string {
+  let out = DESCRIPTION_SYSTEM;
+  if (options.codingStandards && options.codingStandards.trim()) {
+    out += `\n\n## Project coding standards\n${options.codingStandards.trim()}`;
+  }
+  return out;
+}
+
+export function buildDescriptionPrompt(files: readonly DiffFile[], target?: ReviewTarget): string {
+  const parts: string[] = [];
+  if (target?.title) parts.push(`Current PR title: ${target.title}`);
+  if (target?.body) parts.push(`Current PR description:\n${target.body}`);
+  parts.push(
+    `Generate a description for the following diff (${files.length} ${files.length === 1 ? 'file' : 'files'}):`
+  );
+  parts.push(renderDiffPrompt(files));
+  return parts.join('\n\n');
+}

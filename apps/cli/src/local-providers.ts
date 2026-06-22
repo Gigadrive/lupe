@@ -10,6 +10,8 @@ import {
   findingsJsonSchema,
   type AiError,
   type AiModelService,
+  type GenerateDescriptionInput,
+  type GenerateDescriptionResult,
   type GenerateFindingsInput,
   type GenerateFindingsResult,
   type VerifyInput,
@@ -85,6 +87,13 @@ export function coerceVerify(text: string): { grounded: boolean; reason: string 
   }
   // If the model couldn't produce JSON, default to keeping the finding.
   return { grounded: true, reason: 'verifier output unparsable; kept' };
+}
+
+export function coerceDescription(text: string): unknown {
+  const block = extractFirstJson(text, '{');
+  const parsed = block ? tryParse(block) : undefined;
+  if (parsed && typeof parsed === 'object') return parsed;
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +205,40 @@ function makeLocalModel(backend: Backend): AiModelService {
       catch: fail,
     });
 
-  return { generateFindings, verify };
+  const generateDescription = (input: GenerateDescriptionInput): Effect.Effect<GenerateDescriptionResult, AiError> =>
+    Effect.tryPromise({
+      try: async () => {
+        const prompt =
+          `${input.system}\n\n${input.prompt}\n\n` +
+          `Return ONLY a JSON object with {title, summary, type, breaking, testsWritten, notes?} fields. No markdown, no commentary.`;
+        const stdout = await runCommand(backend.command, backend.args, prompt);
+        const raw = coerceDescription(backend.extractText(stdout));
+        if (!raw || typeof raw !== 'object') {
+          throw new Error('model did not produce a valid description JSON');
+        }
+        const obj = raw as Record<string, unknown>;
+        const descriptionType = (obj.type as string) ?? 'feat';
+        const validTypes = ['feat', 'fix', 'refactor', 'docs', 'test', 'chore', 'perf', 'ci', 'deps'] as const;
+        const type = validTypes.includes(descriptionType as (typeof validTypes)[number])
+          ? (descriptionType as (typeof validTypes)[number])
+          : 'feat';
+        return {
+          description: {
+            title: typeof obj.title === 'string' ? obj.title : 'Untitled',
+            summary: typeof obj.summary === 'string' ? obj.summary : '',
+            type,
+            breaking: obj.breaking === true,
+            testsWritten: obj.testsWritten === true,
+            notes: typeof obj.notes === 'string' ? obj.notes : undefined,
+          },
+          usage: EMPTY_USAGE,
+          model: backend.label,
+        };
+      },
+      catch: fail,
+    });
+
+  return { generateFindings, verify, generateDescription };
 }
 
 let noticePrinted = false;

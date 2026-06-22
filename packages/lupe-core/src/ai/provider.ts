@@ -42,6 +42,7 @@ const ANTHROPIC_DEFAULTS: Record<ReviewTask, string> = {
   review: 'claude-opus-4-8',
   verify: 'claude-sonnet-4-6',
   deep: 'claude-fable-5',
+  describe: 'claude-haiku-4-5',
 };
 
 export function defaultModelId(provider: ApiProviderId, task: ReviewTask): string | undefined {

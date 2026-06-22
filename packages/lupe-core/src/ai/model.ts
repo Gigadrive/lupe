@@ -2,7 +2,7 @@ import { Context } from 'effect';
 import type { Effect } from 'effect';
 
 import type { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from '../errors';
-import type { Finding } from '../finding';
+import type { Description, Finding } from '../finding';
 import type { TokenUsage } from '../review';
 
 /**
@@ -10,7 +10,7 @@ import type { TokenUsage } from '../review';
  * id, so provider/model swaps are a single config value (the payoff of the
  * AI SDK's `LanguageModelV2` + `createProviderRegistry` + `customProvider`).
  */
-export type ReviewTask = 'triage' | 'review' | 'verify' | 'deep';
+export type ReviewTask = 'triage' | 'review' | 'verify' | 'deep' | 'describe';
 
 /** A read-only tool the review agent may call during generation. */
 export interface ToolSpec {
@@ -52,6 +52,20 @@ export interface VerifyResult {
   readonly model: string;
 }
 
+export interface GenerateDescriptionInput {
+  readonly task: 'describe';
+  /** Frozen, cacheable prefix (system prompt + standards + stable context). */
+  readonly system: string;
+  /** Volatile per-file / per-chunk content placed *after* the cache breakpoint. */
+  readonly prompt: string;
+}
+
+export interface GenerateDescriptionResult {
+  readonly description: Description;
+  readonly usage: TokenUsage;
+  readonly model: string;
+}
+
 export type AiError = ProviderError | RefusalError | RateLimitError | ReviewOutputError;
 
 /**
@@ -64,6 +78,9 @@ export interface AiModelService {
 
   /** Grounding verifier: drop a candidate the model cannot tie to cited code. */
   readonly verify: (input: VerifyInput) => Effect.Effect<VerifyResult, AiError>;
+
+  /** Generate a PR description (title, summary, type, notes) from the diff. */
+  readonly generateDescription: (input: GenerateDescriptionInput) => Effect.Effect<GenerateDescriptionResult, AiError>;
 }
 
 export class AiModel extends Context.Tag('@gigadrive/lupe-core/AiModel')<AiModel, AiModelService>() {}

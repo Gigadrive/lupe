@@ -12,6 +12,8 @@ import {
   AiSdkLive,
   ConfigError,
   RepoSource,
+  generateDescription,
+  renderDescription,
   renderSarif,
   runReview,
   type ReviewProfile,
@@ -294,12 +296,79 @@ const learnCommand = Command.make(
 ).pipe(Command.withDescription('Teach lupe to stop reporting a recurring false positive.'));
 
 // ---------------------------------------------------------------------------
+// describe
+// ---------------------------------------------------------------------------
+
+interface DescribeFlags {
+  readonly cwd: string;
+  readonly base?: string;
+  readonly head?: string;
+  readonly provider?: CliProvider;
+  readonly print: boolean;
+}
+
+function runDescribeFlow(flags: DescribeFlags) {
+  return Effect.gen(function* () {
+    const fileConfig = yield* loadFileConfig(flags.cwd);
+    const codingStandards = discoverCodingStandards({ rootDir: flags.cwd, explicit: fileConfig.codingStandards });
+    const provider: CliProvider = flags.provider ?? fileConfig.provider ?? 'anthropic';
+    const target: ReviewTarget = { kind: 'local', baseRef: flags.base, headRef: flags.head };
+
+    const aiLayer = isLocalProvider(provider)
+      ? provider === 'claude-cli'
+        ? ClaudeCliLive()
+        : CodexCliLive()
+      : AiSdkLive({ provider, models: fileConfig.models, baseURL: fileConfig.baseURL });
+    const layer = aiLayer.pipe(Layer.provideMerge(RepoSourceLive({ rootDir: flags.cwd })));
+
+    const program = Effect.gen(function* () {
+      const repo = yield* RepoSource;
+      const acquired = yield* repo.acquireDiff(target);
+      const compressed = compressDiff(acquired, {
+        pathFilters: fileConfig.pathFilters,
+        maxFilesReviewed: fileConfig.maxFiles,
+        chunk: false,
+      });
+      if (compressed.files.length === 0) {
+        yield* Console.log(colors.gray('No reviewable changes.'));
+        return;
+      }
+      yield* Console.error(colors.gray(`Describing ${compressed.files.length} file(s) with ${provider}…`));
+      const result = yield* generateDescription(compressed.files, target, { codingStandards });
+      const markdown = renderDescription(result.description);
+      yield* Console.log(markdown);
+    });
+
+    yield* program.pipe(Effect.provide(layer));
+  });
+}
+
+const describeCommand = Command.make(
+  'describe',
+  {
+    cwd: cwdOpt,
+    base: Options.text('base').pipe(Options.withDescription('Base ref to diff against'), Options.optional),
+    head: Options.text('head').pipe(Options.withDescription('Head ref (default HEAD)'), Options.optional),
+    provider: providerOpt,
+    print: Options.boolean('print').pipe(Options.withDescription('Print description to stdout')),
+  },
+  (flags) =>
+    runDescribeFlow({
+      cwd: flags.cwd,
+      base: opt(flags.base),
+      head: opt(flags.head),
+      provider: opt(flags.provider),
+      print: flags.print,
+    })
+).pipe(Command.withDescription('Generate a PR description from the diff.'));
+
+// ---------------------------------------------------------------------------
 // Assemble + run
 // ---------------------------------------------------------------------------
 
 const lupe = Command.make('lupe').pipe(
   Command.withDescription('Platform- and provider-agnostic AI code review agent.'),
-  Command.withSubcommands([reviewCommand, explainCommand, checkCommand, initCommand, learnCommand])
+  Command.withSubcommands([reviewCommand, explainCommand, checkCommand, initCommand, learnCommand, describeCommand])
 );
 
 const run = Command.run(lupe, { name: 'lupe', version: VERSION });

@@ -145,3 +145,25 @@ export function canonicalRuleId(category: Category, ruleId: string): string {
 export function findingsJsonSchema(): unknown {
   return z.toJSONSchema(Findings, { target: 'draft-7' });
 }
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Schema for a generated PR description. Used by `lupe describe` to emit a
+ * structured, user-editable PR description instead of just inline comments.
+ */
+export const DescriptionSchema = z.object({
+  /** Suggested PR title (without the "#" prefix). */
+  title: z.string(),
+  /** One-paragraph summary of what this PR does and why. */
+  summary: z.string(),
+  /** Conventional-commit style type label. */
+  type: z.enum(['feat', 'fix', 'refactor', 'docs', 'test', 'chore', 'perf', 'ci', 'deps']),
+  /** Whether this PR introduces a breaking API or behavior change. */
+  breaking: z.boolean(),
+  /** Whether tests were added or updated. */
+  testsWritten: z.boolean(),
+  /** Additional notes for reviewers (edge cases, tradeoffs, etc.). */
+  notes: z.string().optional(),
+});
+export type Description = z.infer<typeof DescriptionSchema>;
