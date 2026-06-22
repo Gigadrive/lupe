@@ -1,8 +1,8 @@
-import type { DiffFile } from "../diff";
-import type { ReviewTarget } from "../review";
-import { renderDiffPrompt } from "../render/diff-prompt";
+import type { DiffFile } from '../diff';
+import { renderDiffPrompt } from '../render/diff-prompt';
+import type { ReviewTarget } from '../review';
 
-export type ReviewProfile = "chill" | "assertive";
+export type ReviewProfile = 'chill' | 'assertive';
 
 export interface PathInstruction {
   readonly path: string;
@@ -46,15 +46,14 @@ For each finding set:
 If the diff has no real problems, return an empty list.`;
 
 const PROFILE_NOTE: Record<ReviewProfile, string> = {
-  chill:
-    "\n\nProfile: CHILL. Report only medium+ severity, high-confidence problems. Suppress nitpicks entirely.",
+  chill: '\n\nProfile: CHILL. Report only medium+ severity, high-confidence problems. Suppress nitpicks entirely.',
   assertive:
-    "\n\nProfile: ASSERTIVE. Surface lower-severity and lower-confidence issues too, clearly marked, but never fabricate.",
+    '\n\nProfile: ASSERTIVE. Surface lower-severity and lower-confidence issues too, clearly marked, but never fabricate.',
 };
 
 /** Build the frozen, cacheable system prefix (system + standards + path rules + learnings). */
 export function buildSystemPrompt(options: PromptOptions = {}): string {
-  let out = BASE_SYSTEM + PROFILE_NOTE[options.profile ?? "chill"];
+  let out = BASE_SYSTEM + PROFILE_NOTE[options.profile ?? 'chill'];
 
   if (options.codingStandards && options.codingStandards.trim()) {
     out += `\n\n## Project coding standards\n${options.codingStandards.trim()}`;
@@ -78,9 +77,9 @@ export function buildReviewPrompt(files: readonly DiffFile[], target?: ReviewTar
   if (target?.title) parts.push(`PR title: ${target.title}`);
   if (target?.body) parts.push(`PR description:\n${target.body}`);
   parts.push(
-    `Review the following diff (${files.length} ${files.length === 1 ? "file" : "files"}). ` +
-      `Anchor every finding to a line shown below.`,
+    `Review the following diff (${files.length} ${files.length === 1 ? 'file' : 'files'}). ` +
+      `Anchor every finding to a line shown below.`
   );
   parts.push(renderDiffPrompt(files));
-  return parts.join("\n\n");
+  return parts.join('\n\n');
 }

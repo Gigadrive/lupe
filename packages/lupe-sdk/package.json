@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "Embeddable, Promise-returning programmatic facade for the lupe AI code reviewer.",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,9 +15,6 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -32,14 +32,11 @@
     "@gigadrive/lupe-github": "workspace:*",
     "effect": "catalog:"
   },
-  "peerDependencies": {
-    "zod": ">=4.0.0 <5"
-  },
   "devDependencies": {
-    "zod": "catalog:",
-    "@types/node": "catalog:",
-    "@repo/typescript-config": "workspace:*"
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:"
   },
+  "peerDependencies": {},
   "engines": {
     "node": ">=20.18.0"
   }

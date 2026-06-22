@@ -1,6 +1,6 @@
-import { Octokit } from "@octokit/rest";
-import { retry } from "@octokit/plugin-retry";
-import { throttling } from "@octokit/plugin-throttling";
+import { retry } from '@octokit/plugin-retry';
+import { throttling } from '@octokit/plugin-throttling';
+import { Octokit } from '@octokit/rest';
 
 /** Octokit with automatic retry + primary/secondary rate-limit throttling. */
 const OctokitWithPlugins = Octokit.plugin(retry, throttling);
@@ -19,10 +19,9 @@ export function createOctokit(config: OctokitConfig): LupeOctokit {
   return new OctokitWithPlugins({
     auth: config.token,
     baseUrl: config.baseUrl,
-    userAgent: config.userAgent ?? "lupe",
+    userAgent: config.userAgent ?? 'lupe',
     throttle: {
-      onRateLimit: (_retryAfter: number, _options: unknown, _octokit: unknown, retryCount: number) =>
-        retryCount < 3,
+      onRateLimit: (_retryAfter: number, _options: unknown, _octokit: unknown, retryCount: number) => retryCount < 3,
       onSecondaryRateLimit: (_retryAfter: number, _options: unknown, _octokit: unknown, retryCount: number) =>
         retryCount < 3,
     },

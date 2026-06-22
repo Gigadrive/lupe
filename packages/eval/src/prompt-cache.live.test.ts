@@ -1,7 +1,8 @@
-import { Effect, Layer } from "effect";
-import { describe, expect, test } from "vitest";
-import { AiSdkLive, RepoSource, generateCandidates, type RepoSourceService } from "@gigadrive/lupe-core";
-import { parseUnifiedDiff } from "@gigadrive/lupe-git";
+import { Effect, Layer } from 'effect';
+import { describe, expect, test } from 'vitest';
+
+import { AiSdkLive, RepoSource, generateCandidates, type RepoSourceService } from '@gigadrive/lupe-core';
+import { parseUnifiedDiff } from '@gigadrive/lupe-git';
 
 /**
  * LIVE regression gate (skipped without ANTHROPIC_API_KEY): proves the
@@ -22,25 +23,25 @@ const SMALL_DIFF = `diff --git a/src/x.ts b/src/x.ts
 
 const fakeRepo: RepoSourceService = {
   acquireDiff: () => Effect.succeed([]),
-  readFile: () => Effect.succeed(""),
+  readFile: () => Effect.succeed(''),
   listDir: () => Effect.succeed([]),
   grep: () => Effect.succeed([]),
 };
 
-describe("Anthropic prompt cache (live)", () => {
+describe('Anthropic prompt cache (live)', () => {
   test.skipIf(!hasKey)(
-    "second identical call reads the cached prefix",
+    'second identical call reads the cached prefix',
     async () => {
       const files = parseUnifiedDiff(SMALL_DIFF);
       // Pad the cacheable system prefix well past the 4096-token Haiku minimum.
-      const codingStandards = "Always prefer immutable data and parameterised queries. ".repeat(1500);
+      const codingStandards = 'Always prefer immutable data and parameterised queries. '.repeat(1500);
 
-      const layer = AiSdkLive({ provider: "anthropic", models: { review: "claude-haiku-4-5" } }).pipe(
-        Layer.provide(Layer.succeed(RepoSource, fakeRepo)),
+      const layer = AiSdkLive({ provider: 'anthropic', models: { review: 'claude-haiku-4-5' } }).pipe(
+        Layer.provide(Layer.succeed(RepoSource, fakeRepo))
       );
 
       const program = generateCandidates(files, undefined, {
-        task: "review",
+        task: 'review',
         codingStandards,
         maxSteps: 1,
       });
@@ -52,10 +53,10 @@ describe("Anthropic prompt cache (live)", () => {
 
       expect(second.usage.cacheReadTokens).toBeGreaterThan(0);
     },
-    120_000,
+    120_000
   );
 
-  test("scaffold present even without a key", () => {
+  test('scaffold present even without a key', () => {
     expect(hasKey || !hasKey).toBe(true);
   });
 });

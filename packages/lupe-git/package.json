@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "Diff parsing, hunk → (line, side) anchoring, read-only repo tools, and Qodo-style context compression for lupe.",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,9 +15,6 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -30,15 +30,13 @@
     "@gigadrive/lupe-core": "workspace:*",
     "simple-git": "catalog:"
   },
-  "peerDependencies": {
-    "effect": ">=3.21.0 <4",
-    "@effect/platform": ">=0.96.0 <0.97"
-  },
   "devDependencies": {
-    "effect": "catalog:",
-    "@effect/platform": "catalog:",
+    "@repo/typescript-config": "workspace:*",
     "@types/node": "catalog:",
-    "@repo/typescript-config": "workspace:*"
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": ">=3.21.0 <4"
   },
   "engines": {
     "node": ">=20.18.0"

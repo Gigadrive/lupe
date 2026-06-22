@@ -1,8 +1,0 @@
-node_modules
-dist
-**/dist
-.turbo
-coverage
-pnpm-lock.yaml
-*.tsbuildinfo
-CHANGELOG.md

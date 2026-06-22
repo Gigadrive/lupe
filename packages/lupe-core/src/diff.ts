@@ -1,11 +1,11 @@
-import type { Side } from "./finding";
+import type { Side } from './finding';
 
 /**
  * Shared diff domain model. Types live in core so the engine can reason about
  * diffs without depending on the parser (which lives in @gigadrive/lupe-git).
  */
 
-export type DiffLineKind = "add" | "del" | "context";
+export type DiffLineKind = 'add' | 'del' | 'context';
 
 export interface DiffLine {
   readonly kind: DiffLineKind;
@@ -27,7 +27,7 @@ export interface DiffHunk {
   readonly lines: readonly DiffLine[];
 }
 
-export type DiffStatus = "added" | "modified" | "deleted" | "renamed";
+export type DiffStatus = 'added' | 'modified' | 'deleted' | 'renamed';
 
 export interface DiffFile {
   /** New path (head). For deletions this is the removed path. */

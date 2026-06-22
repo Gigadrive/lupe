@@ -1,8 +1,9 @@
-import { Context } from "effect";
-import type { Effect } from "effect";
-import type { DiffFile, Anchor } from "./diff";
-import type { PullRequestRef, ReviewTarget } from "./review";
-import type { DiffParseError, GitHubError } from "./errors";
+import { Context } from 'effect';
+import type { Effect } from 'effect';
+
+import type { DiffFile, Anchor } from './diff';
+import type { DiffParseError, GitHubError } from './errors';
+import type { PullRequestRef, ReviewTarget } from './review';
 
 /**
  * Read-only access to the repository under review. Implemented by
@@ -19,14 +20,11 @@ export interface RepoSourceService {
   /** Search the repo for a regex; returns `path:line:text` style matches. */
   readonly grep: (
     pattern: string,
-    options?: { readonly glob?: string; readonly maxResults?: number },
+    options?: { readonly glob?: string; readonly maxResults?: number }
   ) => Effect.Effect<readonly string[], DiffParseError>;
 }
 
-export class RepoSource extends Context.Tag("@gigadrive/lupe-core/RepoSource")<
-  RepoSource,
-  RepoSourceService
->() {}
+export class RepoSource extends Context.Tag('@gigadrive/lupe-core/RepoSource')<RepoSource, RepoSourceService>() {}
 
 /** One anchored inline comment ready to post. */
 export interface AnchoredComment {
@@ -58,7 +56,7 @@ export interface GitHubClientService {
   readonly postReview: (input: PostReviewInput) => Effect.Effect<void, GitHubError>;
 }
 
-export class GitHubClient extends Context.Tag("@gigadrive/lupe-core/GitHubClient")<
+export class GitHubClient extends Context.Tag('@gigadrive/lupe-core/GitHubClient')<
   GitHubClient,
   GitHubClientService
 >() {}

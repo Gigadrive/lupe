@@ -1,9 +1,10 @@
-import { describe, expect, test } from "vitest";
-import type { LanguageModelUsage } from "ai";
-import { anthropicCacheBreakpoint, toTokenUsage } from "./usage";
+import type { LanguageModelUsage } from 'ai';
+import { describe, expect, test } from 'vitest';
 
-describe("toTokenUsage", () => {
-  test("maps input/output and cache details", () => {
+import { anthropicCacheBreakpoint, toTokenUsage } from './usage';
+
+describe('toTokenUsage', () => {
+  test('maps input/output and cache details', () => {
     const usage = {
       inputTokens: 1000,
       outputTokens: 200,
@@ -18,7 +19,7 @@ describe("toTokenUsage", () => {
     });
   });
 
-  test("falls back to deprecated cachedInputTokens", () => {
+  test('falls back to deprecated cachedInputTokens', () => {
     const usage = {
       inputTokens: 50,
       outputTokens: 10,
@@ -27,7 +28,7 @@ describe("toTokenUsage", () => {
     expect(toTokenUsage(usage).cacheReadTokens).toBe(40);
   });
 
-  test("handles undefined usage", () => {
+  test('handles undefined usage', () => {
     expect(toTokenUsage(undefined)).toEqual({
       inputTokens: 0,
       outputTokens: 0,
@@ -36,7 +37,7 @@ describe("toTokenUsage", () => {
     });
   });
 
-  test("anthropic cache breakpoint shape", () => {
-    expect(anthropicCacheBreakpoint()).toEqual({ anthropic: { cacheControl: { type: "ephemeral" } } });
+  test('anthropic cache breakpoint shape', () => {
+    expect(anthropicCacheBreakpoint()).toEqual({ anthropic: { cacheControl: { type: 'ephemeral' } } });
   });
 });

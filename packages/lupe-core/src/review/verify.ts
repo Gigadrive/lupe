@@ -1,9 +1,10 @@
-import { Effect } from "effect";
-import type { DiffFile } from "../diff";
-import type { Finding } from "../finding";
-import { AiModel, type AiError } from "../ai/model";
-import { serialiseFileDiff } from "../render/diff-prompt";
-import { EMPTY_USAGE, addUsage, type TokenUsage } from "../review";
+import { Effect } from 'effect';
+
+import { AiModel, type AiError } from '../ai/model';
+import type { DiffFile } from '../diff';
+import type { Finding } from '../finding';
+import { serialiseFileDiff } from '../render/diff-prompt';
+import { EMPTY_USAGE, addUsage, type TokenUsage } from '../review';
 
 const VERIFY_SYSTEM = `You are lupe's grounding verifier. You receive a single candidate code-review finding and the relevant code context. Your job is to keep only findings that are CORRECT and GROUNDED in the cited code.
 
@@ -26,13 +27,13 @@ function buildEvidenceContext(finding: Finding, file: DiffFile | undefined): str
   if (file) parts.push(serialiseFileDiff(file));
   if (finding.evidence.length > 0) {
     parts.push(
-      "Cited evidence:\n" +
+      'Cited evidence:\n' +
         finding.evidence
-          .map((e) => `- ${e.path}:${e.startLine}-${e.endLine}${e.snippet ? `\n  ${e.snippet}` : ""}`)
-          .join("\n"),
+          .map((e) => `- ${e.path}:${e.startLine}-${e.endLine}${e.snippet ? `\n  ${e.snippet}` : ''}`)
+          .join('\n')
     );
   }
-  return parts.join("\n\n");
+  return parts.join('\n\n');
 }
 
 /**
@@ -42,7 +43,7 @@ function buildEvidenceContext(finding: Finding, file: DiffFile | undefined): str
 export function verifyFindings(
   candidates: readonly Finding[],
   files: readonly DiffFile[],
-  options: VerifyOptions = {},
+  options: VerifyOptions = {}
 ): Effect.Effect<VerifyOutcome, AiError, AiModel> {
   return Effect.gen(function* () {
     const ai = yield* AiModel;
@@ -53,13 +54,13 @@ export function verifyFindings(
       (candidate) =>
         ai
           .verify({
-            task: "verify",
+            task: 'verify',
             system: VERIFY_SYSTEM,
             candidate,
             evidenceContext: buildEvidenceContext(candidate, byPath.get(candidate.path)),
           })
           .pipe(Effect.map((result) => ({ candidate, result }))),
-      { concurrency: options.concurrency ?? 4 },
+      { concurrency: options.concurrency ?? 4 }
     );
 
     const kept: Finding[] = [];

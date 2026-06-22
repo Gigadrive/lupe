@@ -1,5 +1,5 @@
-import { expect, test } from "vitest";
+import { expect, test } from 'vitest';
 
-test("eval harness scaffold is wired", () => {
+test('eval harness scaffold is wired', () => {
   expect(true).toBe(true);
 });

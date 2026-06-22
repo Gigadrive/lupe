@@ -1,5 +1,5 @@
-import { renderInlineComment, type AnchoredComment, type DiffFile, type Finding } from "@gigadrive/lupe-core";
-import { resolveAnchor } from "@gigadrive/lupe-git";
+import { renderInlineComment, type AnchoredComment, type DiffFile, type Finding } from '@gigadrive/lupe-core';
+import { resolveAnchor } from '@gigadrive/lupe-git';
 
 export interface AnchoredFindings {
   /** Findings that mapped to a valid diff anchor and can be posted inline. */

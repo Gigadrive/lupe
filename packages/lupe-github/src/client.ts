@@ -1,4 +1,5 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer } from 'effect';
+
 import {
   GitHubClient,
   GitHubError,
@@ -10,18 +11,19 @@ import {
   type GitHubClientService,
   type PostReviewInput,
   type PullRequestRef,
-} from "@gigadrive/lupe-core";
-import { buildDiffFile } from "@gigadrive/lupe-git";
-import { createOctokit, type LupeOctokit, type OctokitConfig } from "./octokit";
+} from '@gigadrive/lupe-core';
+import { buildDiffFile } from '@gigadrive/lupe-git';
+
+import { createOctokit, type LupeOctokit, type OctokitConfig } from './octokit';
 
 /** Map an anchored comment to a GitHub review-comment payload (line/side/start_line). */
 export function toReviewComment(c: AnchoredComment): {
   path: string;
   body: string;
   line: number;
-  side: "LEFT" | "RIGHT";
+  side: 'LEFT' | 'RIGHT';
   start_line?: number;
-  start_side?: "LEFT" | "RIGHT";
+  start_side?: 'LEFT' | 'RIGHT';
 } {
   return {
     path: c.anchor.path,
@@ -80,7 +82,7 @@ async function resolveLupeThreads(octokit: LupeOctokit, pr: PullRequestRef): Pro
     })) as ThreadsResponse;
     const threads = data.repository.pullRequest.reviewThreads;
     for (const thread of threads.nodes) {
-      const body = thread.comments.nodes[0]?.body ?? "";
+      const body = thread.comments.nodes[0]?.body ?? '';
       if (!thread.isResolved && body.includes(INLINE_MARKER)) {
         await octokit.graphql(RESOLVE_MUTATION, { id: thread.id }).catch(() => undefined);
       }
@@ -90,18 +92,15 @@ async function resolveLupeThreads(octokit: LupeOctokit, pr: PullRequestRef): Pro
   }
 }
 
-async function findSticky(
-  octokit: LupeOctokit,
-  pr: PullRequestRef,
-): Promise<{ id: number; body: string } | undefined> {
+async function findSticky(octokit: LupeOctokit, pr: PullRequestRef): Promise<{ id: number; body: string } | undefined> {
   const comments = await octokit.paginate(octokit.rest.issues.listComments, {
     owner: pr.owner,
     repo: pr.repo,
     issue_number: pr.number,
     per_page: 100,
   });
-  const sticky = comments.find((c) => (c.body ?? "").includes(SUMMARY_MARKER));
-  return sticky ? { id: sticky.id, body: sticky.body ?? "" } : undefined;
+  const sticky = comments.find((c) => (c.body ?? '').includes(SUMMARY_MARKER));
+  return sticky ? { id: sticky.id, body: sticky.body ?? '' } : undefined;
 }
 
 export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
@@ -122,7 +121,7 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
             previousFilename: f.previous_filename ?? undefined,
             status: f.status,
             patch: f.patch,
-          }),
+          })
         );
       },
       catch: toGitHubError,
@@ -150,7 +149,7 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
             repo: input.pr.repo,
             pull_number: input.pr.number,
             commit_id: input.headSha,
-            event: "COMMENT",
+            event: 'COMMENT',
             body: `${INLINE_MARKER} left ${input.comments.length} inline comment(s). See the summary below.`,
             comments: input.comments.map(toReviewComment),
           });

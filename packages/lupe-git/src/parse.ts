@@ -1,4 +1,4 @@
-import type { DiffFile, DiffHunk, DiffLine, DiffStatus } from "@gigadrive/lupe-core";
+import type { DiffFile, DiffHunk, DiffLine, DiffStatus } from '@gigadrive/lupe-core';
 
 /**
  * Unified-diff parser. Handles both a full multi-file `git diff` and a single
@@ -23,7 +23,7 @@ export function parseHunks(patch: string): DiffHunk[] {
   let oldLine = 0;
   let newLine = 0;
 
-  for (const raw of patch.split("\n")) {
+  for (const raw of patch.split('\n')) {
     const header = HUNK_HEADER.exec(raw);
     if (header) {
       current = {
@@ -40,18 +40,18 @@ export function parseHunks(patch: string): DiffHunk[] {
       continue;
     }
     if (!current) continue; // preamble before the first hunk
-    if (raw.startsWith("\\")) continue; // "\ No newline at end of file"
+    if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
 
     const marker = raw.charAt(0);
     const content = raw.slice(1);
-    if (marker === "+") {
-      current.lines.push({ kind: "add", content, newLine });
+    if (marker === '+') {
+      current.lines.push({ kind: 'add', content, newLine });
       newLine++;
-    } else if (marker === "-") {
-      current.lines.push({ kind: "del", content, oldLine });
+    } else if (marker === '-') {
+      current.lines.push({ kind: 'del', content, oldLine });
       oldLine++;
-    } else if (marker === " ") {
-      current.lines.push({ kind: "context", content, oldLine, newLine });
+    } else if (marker === ' ') {
+      current.lines.push({ kind: 'context', content, oldLine, newLine });
       oldLine++;
       newLine++;
     }
@@ -66,20 +66,20 @@ function countLines(hunks: readonly DiffHunk[]): { additions: number; deletions:
   let deletions = 0;
   for (const h of hunks) {
     for (const l of h.lines) {
-      if (l.kind === "add") additions++;
-      else if (l.kind === "del") deletions++;
+      if (l.kind === 'add') additions++;
+      else if (l.kind === 'del') deletions++;
     }
   }
   return { additions, deletions };
 }
 
 const GITHUB_STATUS: Record<string, DiffStatus> = {
-  added: "added",
-  removed: "deleted",
-  modified: "modified",
-  renamed: "renamed",
-  changed: "modified",
-  copied: "added",
+  added: 'added',
+  removed: 'deleted',
+  modified: 'modified',
+  renamed: 'renamed',
+  changed: 'modified',
+  copied: 'added',
 };
 
 /** Build a DiffFile from a GitHub `pulls.listFiles` entry (hunk-only patch). */
@@ -91,12 +91,12 @@ export function buildDiffFile(input: {
 }): DiffFile {
   const hunks = input.patch ? parseHunks(input.patch) : [];
   const { additions, deletions } = countLines(hunks);
-  const status = GITHUB_STATUS[input.status] ?? "modified";
+  const status = GITHUB_STATUS[input.status] ?? 'modified';
   return {
     path: input.filename,
     oldPath: input.previousFilename,
     status,
-    binary: !input.patch && input.status !== "renamed",
+    binary: !input.patch && input.status !== 'renamed',
     hunks,
     additions,
     deletions,
@@ -104,21 +104,21 @@ export function buildDiffFile(input: {
 }
 
 function stripPrefix(p: string): string {
-  if (p === "/dev/null") return p;
-  if (p.startsWith("a/") || p.startsWith("b/")) return p.slice(2);
+  if (p === '/dev/null') return p;
+  if (p.startsWith('a/') || p.startsWith('b/')) return p.slice(2);
   return p;
 }
 
 /** Parse a full, possibly multi-file unified diff (`git diff` output). */
 export function parseUnifiedDiff(diffText: string): DiffFile[] {
   const files: DiffFile[] = [];
-  const lines = diffText.split("\n");
+  const lines = diffText.split('\n');
 
   // Split into per-file sections delimited by "diff --git ".
   const sections: string[][] = [];
   let currentSection: string[] | undefined;
   for (const line of lines) {
-    if (line.startsWith("diff --git ")) {
+    if (line.startsWith('diff --git ')) {
       currentSection = [line];
       sections.push(currentSection);
     } else if (currentSection) {
@@ -127,44 +127,44 @@ export function parseUnifiedDiff(diffText: string): DiffFile[] {
   }
 
   for (const section of sections) {
-    const text = section.join("\n");
+    const text = section.join('\n');
     let oldPath: string | undefined;
     let newPath: string | undefined;
-    let status: DiffStatus = "modified";
+    let status: DiffStatus = 'modified';
     let binary = false;
 
     for (const line of section) {
-      if (line.startsWith("new file mode")) status = "added";
-      else if (line.startsWith("deleted file mode")) status = "deleted";
-      else if (line.startsWith("rename from ")) {
-        status = "renamed";
-        oldPath = line.slice("rename from ".length).trim();
-      } else if (line.startsWith("rename to ")) {
-        status = "renamed";
-        newPath = line.slice("rename to ".length).trim();
-      } else if (line.startsWith("--- ")) {
+      if (line.startsWith('new file mode')) status = 'added';
+      else if (line.startsWith('deleted file mode')) status = 'deleted';
+      else if (line.startsWith('rename from ')) {
+        status = 'renamed';
+        oldPath = line.slice('rename from '.length).trim();
+      } else if (line.startsWith('rename to ')) {
+        status = 'renamed';
+        newPath = line.slice('rename to '.length).trim();
+      } else if (line.startsWith('--- ')) {
         const p = stripPrefix(line.slice(4).trim());
-        if (p !== "/dev/null") oldPath = p;
-        else status = "added";
-      } else if (line.startsWith("+++ ")) {
+        if (p !== '/dev/null') oldPath = p;
+        else status = 'added';
+      } else if (line.startsWith('+++ ')) {
         const p = stripPrefix(line.slice(4).trim());
-        if (p !== "/dev/null") newPath = p;
-        else status = "deleted";
-      } else if (line.startsWith("Binary files") || line.startsWith("GIT binary patch")) {
+        if (p !== '/dev/null') newPath = p;
+        else status = 'deleted';
+      } else if (line.startsWith('Binary files') || line.startsWith('GIT binary patch')) {
         binary = true;
       }
     }
 
     // Fall back to the `diff --git a/x b/y` header for paths when needed.
     if (!oldPath || !newPath) {
-      const header = /^diff --git a\/(.+) b\/(.+)$/.exec(section[0] ?? "");
+      const header = /^diff --git a\/(.+) b\/(.+)$/.exec(section[0] ?? '');
       if (header) {
         oldPath = oldPath ?? header[1];
         newPath = newPath ?? header[2];
       }
     }
 
-    const path = status === "deleted" ? (oldPath ?? newPath ?? "") : (newPath ?? oldPath ?? "");
+    const path = status === 'deleted' ? (oldPath ?? newPath ?? '') : (newPath ?? oldPath ?? '');
     const hunks = binary ? [] : parseHunks(text);
     const { additions, deletions } = countLines(hunks);
 

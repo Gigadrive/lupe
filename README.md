@@ -40,6 +40,10 @@ pnpm build          # turbo run build (tsdown, ESM-only)
 pnpm typecheck
 pnpm test
 pnpm check:exports  # publint
+pnpm format         # oxfmt --check  (format:fix to apply)
+pnpm lint           # oxlint
+pnpm knip           # unused deps/exports
+pnpm effect:check   # @effect/language-service diagnostics
 ```
 
 Node ≥ 20.18, pnpm ≥ 10.

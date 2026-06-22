@@ -1,6 +1,10 @@
-import { Effect, Layer } from "effect";
-import { generateText, Output, stepCountIs } from "ai";
-import { z } from "zod";
+import { generateText, Output, stepCountIs } from 'ai';
+import { Effect, Layer } from 'effect';
+import { z } from 'zod';
+
+import { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from '../errors';
+import { Finding } from '../finding';
+import { RepoSource } from '../ports';
 import {
   AiModel,
   type AiError,
@@ -9,23 +13,20 @@ import {
   type GenerateFindingsResult,
   type VerifyInput,
   type VerifyResult,
-} from "./model";
-import { Finding } from "../finding";
-import { RepoSource } from "../ports";
-import { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from "../errors";
-import { createModelResolver, type LupeAiConfig } from "./provider";
-import { buildRepoTools } from "./tools";
-import { anthropicCacheBreakpoint, toTokenUsage } from "./usage";
+} from './model';
+import { createModelResolver, type LupeAiConfig } from './provider';
+import { buildRepoTools } from './tools';
+import { anthropicCacheBreakpoint, toTokenUsage } from './usage';
 
 const DEFAULT_MAX_STEPS = 12;
 
 /** Map an AI SDK / network failure onto a tagged lupe error. */
 function liftError(error: unknown, provider: string): AiError {
-  const name = (error as { name?: string } | null)?.name ?? "";
+  const name = (error as { name?: string } | null)?.name ?? '';
   const message = error instanceof Error ? error.message : String(error);
   if (/NoObjectGenerated|NoOutputGenerated/.test(name)) {
     return new ReviewOutputError({
-      message: "model did not produce valid structured findings",
+      message: 'model did not produce valid structured findings',
       cause: error,
     });
   }
@@ -59,22 +60,20 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
       const repo = yield* RepoSource;
       const tools = buildRepoTools(repo);
       const resolveModel = createModelResolver(config);
-      const cacheable = config.provider === "anthropic";
+      const cacheable = config.provider === 'anthropic';
 
       const systemMessage = (content: string) =>
         cacheable
-          ? { role: "system" as const, content, providerOptions: anthropicCacheBreakpoint() }
-          : { role: "system" as const, content };
+          ? { role: 'system' as const, content, providerOptions: anthropicCacheBreakpoint() }
+          : { role: 'system' as const, content };
 
-      const generateFindings = (
-        input: GenerateFindingsInput,
-      ): Effect.Effect<GenerateFindingsResult, AiError> =>
+      const generateFindings = (input: GenerateFindingsInput): Effect.Effect<GenerateFindingsResult, AiError> =>
         Effect.tryPromise({
           try: async () => {
             const { model, modelId } = resolveModel(input.task);
             const result = await generateText({
               model,
-              messages: [systemMessage(input.system), { role: "user", content: input.prompt }],
+              messages: [systemMessage(input.system), { role: 'user', content: input.prompt }],
               tools,
               stopWhen: [stepCountIs(input.maxSteps ?? DEFAULT_MAX_STEPS)],
               output: Output.array({ element: Finding }),
@@ -104,7 +103,7 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
               messages: [
                 systemMessage(input.system),
                 {
-                  role: "user",
+                  role: 'user',
                   content:
                     `Finding under review:\n` +
                     `- rule: ${candidate.ruleId}\n` +
@@ -133,6 +132,6 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
 
       const service: AiModelService = { generateFindings, verify };
       return service;
-    }),
+    })
   );
 }

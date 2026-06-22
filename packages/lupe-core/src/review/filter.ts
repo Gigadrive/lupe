@@ -1,5 +1,5 @@
-import type { Finding } from "../finding";
-import { SEVERITY_RANK, isAdvisory } from "../finding";
+import type { Finding } from '../finding';
+import { SEVERITY_RANK, isAdvisory } from '../finding';
 
 export interface FilterOptions {
   /** Drop findings below this confidence (0..1). Default 0.5. */
@@ -38,7 +38,7 @@ export function sortFindings(findings: readonly Finding[]): Finding[] {
       SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
       b.confidence - a.confidence ||
       a.path.localeCompare(b.path) ||
-      a.startLine - b.startLine,
+      a.startLine - b.startLine
   );
 }
 

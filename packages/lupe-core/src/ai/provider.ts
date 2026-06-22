@@ -1,16 +1,17 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createGateway } from "@ai-sdk/gateway";
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import type { LanguageModel } from "ai";
-import type { ReviewTask } from "./model";
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGateway } from '@ai-sdk/gateway';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { LanguageModel } from 'ai';
+
+import type { ReviewTask } from './model';
 
 /** API-key (and gateway) providers the AI SDK layer can resolve directly.
  * The local-CLI providers (`claude-cli`, `codex-cli`) are separate AiModel
  * Layers contributed by the CLI package. */
-export type ApiProviderId = "anthropic" | "openai" | "google" | "bedrock" | "openai-compatible" | "gateway";
+export type ApiProviderId = 'anthropic' | 'openai' | 'google' | 'bedrock' | 'openai-compatible' | 'gateway';
 
 export interface LupeAiConfig {
   readonly provider: ApiProviderId;
@@ -37,14 +38,14 @@ export type ModelResolver = (task: ReviewTask) => ModelHandle;
 /** Default task→model routing. Only Anthropic (the recommended default) ships
  * hard defaults; other providers must specify `models` per task. */
 const ANTHROPIC_DEFAULTS: Record<ReviewTask, string> = {
-  triage: "claude-haiku-4-5",
-  review: "claude-opus-4-8",
-  verify: "claude-sonnet-4-6",
-  deep: "claude-fable-5",
+  triage: 'claude-haiku-4-5',
+  review: 'claude-opus-4-8',
+  verify: 'claude-sonnet-4-6',
+  deep: 'claude-fable-5',
 };
 
 export function defaultModelId(provider: ApiProviderId, task: ReviewTask): string | undefined {
-  return provider === "anthropic" ? ANTHROPIC_DEFAULTS[task] : undefined;
+  return provider === 'anthropic' ? ANTHROPIC_DEFAULTS[task] : undefined;
 }
 
 export function resolveTaskModelId(config: LupeAiConfig, task: ReviewTask): string {
@@ -52,7 +53,7 @@ export function resolveTaskModelId(config: LupeAiConfig, task: ReviewTask): stri
   if (!id) {
     throw new Error(
       `No model configured for task "${task}" with provider "${config.provider}". ` +
-        `Set models.${task} in your lupe config.`,
+        `Set models.${task} in your lupe config.`
     );
   }
   return id;
@@ -62,15 +63,15 @@ type ModelFactory = (modelId: string) => LanguageModel;
 
 function buildProvider(config: LupeAiConfig): ModelFactory {
   switch (config.provider) {
-    case "anthropic": {
+    case 'anthropic': {
       const p = createAnthropic({ apiKey: config.apiKey, baseURL: config.baseURL, headers: config.headers });
       return (id) => p(id);
     }
-    case "openai": {
+    case 'openai': {
       const p = createOpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, headers: config.headers });
       return (id) => p(id);
     }
-    case "google": {
+    case 'google': {
       const p = createGoogleGenerativeAI({
         apiKey: config.apiKey,
         baseURL: config.baseURL,
@@ -78,23 +79,23 @@ function buildProvider(config: LupeAiConfig): ModelFactory {
       });
       return (id) => p(id);
     }
-    case "openai-compatible": {
+    case 'openai-compatible': {
       if (!config.baseURL) {
         throw new Error(`provider "openai-compatible" requires a baseURL`);
       }
       const p = createOpenAICompatible({
-        name: config.name ?? "openai-compatible",
+        name: config.name ?? 'openai-compatible',
         baseURL: config.baseURL,
         apiKey: config.apiKey,
         headers: config.headers,
       });
       return (id) => p(id);
     }
-    case "gateway": {
+    case 'gateway': {
       const p = createGateway({ apiKey: config.apiKey, baseURL: config.baseURL });
       return (id) => p(id);
     }
-    case "bedrock": {
+    case 'bedrock': {
       const p = createAmazonBedrock({ region: config.region });
       return (id) => p(id);
     }

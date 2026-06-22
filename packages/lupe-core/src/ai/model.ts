@@ -1,15 +1,16 @@
-import { Context } from "effect";
-import type { Effect } from "effect";
-import type { Finding } from "../finding";
-import type { TokenUsage } from "../review";
-import type { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from "../errors";
+import { Context } from 'effect';
+import type { Effect } from 'effect';
+
+import type { ProviderError, RateLimitError, RefusalError, ReviewOutputError } from '../errors';
+import type { Finding } from '../finding';
+import type { TokenUsage } from '../review';
 
 /**
  * Semantic task aliases. The engine asks for a *task*, never a concrete model
  * id, so provider/model swaps are a single config value (the payoff of the
  * AI SDK's `LanguageModelV2` + `createProviderRegistry` + `customProvider`).
  */
-export type ReviewTask = "triage" | "review" | "verify" | "deep";
+export type ReviewTask = 'triage' | 'review' | 'verify' | 'deep';
 
 /** A read-only tool the review agent may call during generation. */
 export interface ToolSpec {
@@ -65,4 +66,4 @@ export interface AiModelService {
   readonly verify: (input: VerifyInput) => Effect.Effect<VerifyResult, AiError>;
 }
 
-export class AiModel extends Context.Tag("@gigadrive/lupe-core/AiModel")<AiModel, AiModelService>() {}
+export class AiModel extends Context.Tag('@gigadrive/lupe-core/AiModel')<AiModel, AiModelService>() {}

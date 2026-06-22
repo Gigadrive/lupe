@@ -19,6 +19,7 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true,
-    "noEmit": true
+    "noEmit": true,
+    "plugins": [{ "name": "@effect/language-service" }]
   }
 }

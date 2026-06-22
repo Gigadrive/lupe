@@ -1,8 +1,9 @@
-import { Effect } from "effect";
-import type { DiffFile } from "../diff";
-import type { ReviewTarget } from "../review";
-import { AiModel, type AiError, type GenerateFindingsResult, type ReviewTask } from "../ai/model";
-import { buildReviewPrompt, buildSystemPrompt, type PromptOptions } from "./prompt";
+import { Effect } from 'effect';
+
+import { AiModel, type AiError, type GenerateFindingsResult, type ReviewTask } from '../ai/model';
+import type { DiffFile } from '../diff';
+import type { ReviewTarget } from '../review';
+import { buildReviewPrompt, buildSystemPrompt, type PromptOptions } from './prompt';
 
 export interface GenerateCandidatesOptions extends PromptOptions {
   /** Which model task to route the review through (default "review"). */
@@ -18,14 +19,14 @@ export interface GenerateCandidatesOptions extends PromptOptions {
 export function generateCandidates(
   files: readonly DiffFile[],
   target: ReviewTarget | undefined,
-  options: GenerateCandidatesOptions = {},
+  options: GenerateCandidatesOptions = {}
 ): Effect.Effect<GenerateFindingsResult, AiError, AiModel> {
   return Effect.gen(function* () {
     const ai = yield* AiModel;
     const system = buildSystemPrompt(options);
     const prompt = buildReviewPrompt(files, target);
     return yield* ai.generateFindings({
-      task: options.task ?? "review",
+      task: options.task ?? 'review',
       system,
       prompt,
       maxSteps: options.maxSteps,

@@ -1,19 +1,19 @@
-import type { Finding, ReviewRunResult, Severity } from "@gigadrive/lupe-core";
-import { SEVERITY_RANK } from "@gigadrive/lupe-core";
+import type { Finding, ReviewRunResult, Severity } from '@gigadrive/lupe-core';
+import { SEVERITY_RANK } from '@gigadrive/lupe-core';
 
 const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 const wrap = (code: string) => (s: string) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
 
 const c = {
-  bold: wrap("1"),
-  dim: wrap("2"),
-  red: wrap("31"),
-  green: wrap("32"),
-  yellow: wrap("33"),
-  blue: wrap("34"),
-  magenta: wrap("35"),
-  cyan: wrap("36"),
-  gray: wrap("90"),
+  bold: wrap('1'),
+  dim: wrap('2'),
+  red: wrap('31'),
+  green: wrap('32'),
+  yellow: wrap('33'),
+  blue: wrap('34'),
+  magenta: wrap('35'),
+  cyan: wrap('36'),
+  gray: wrap('90'),
 };
 
 const SEVERITY_COLOR: Record<Severity, (s: string) => string> = {
@@ -25,44 +25,44 @@ const SEVERITY_COLOR: Record<Severity, (s: string) => string> = {
 };
 
 const SEVERITY_GLYPH: Record<Severity, string> = {
-  critical: "✖",
-  high: "✖",
-  medium: "▲",
-  low: "•",
-  info: "·",
+  critical: '✖',
+  high: '✖',
+  medium: '▲',
+  low: '•',
+  info: '·',
 };
 
 function indent(text: string, spaces: number): string {
-  const pad = " ".repeat(spaces);
+  const pad = ' '.repeat(spaces);
   return text
-    .split("\n")
+    .split('\n')
     .map((l) => pad + l)
-    .join("\n");
+    .join('\n');
 }
 
 function formatFinding(f: Finding): string {
   const color = SEVERITY_COLOR[f.severity];
   const head = `${color(`${SEVERITY_GLYPH[f.severity]} ${f.severity.toUpperCase()}`)} ${c.bold(
-    `${f.path}:${f.startLine}`,
+    `${f.path}:${f.startLine}`
   )} ${c.gray(`[${f.category} · ${Math.round(f.confidence * 100)}%]`)}`;
   const lines = [head, indent(c.bold(f.title), 2), indent(f.message.trim(), 2)];
   if (f.suggestion) {
-    lines.push(indent(c.green("suggestion:"), 2));
+    lines.push(indent(c.green('suggestion:'), 2));
     lines.push(indent(c.green(f.suggestion.trimEnd()), 4));
   }
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /** Render a full review result for the terminal (`--format md`/default). */
 export function formatReview(result: ReviewRunResult): string {
   const out: string[] = [];
   if (result.findings.length === 0) {
-    out.push(c.green("✓ No issues found."));
+    out.push(c.green('✓ No issues found.'));
   } else {
     const sorted = [...result.findings].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
     for (const f of sorted) {
       out.push(formatFinding(f));
-      out.push("");
+      out.push('');
     }
   }
 
@@ -70,16 +70,16 @@ export function formatReview(result: ReviewRunResult): string {
   out.push(
     c.gray(
       `${result.findings.length} finding(s) · ${result.candidateCount} candidate(s) · ` +
-        `${result.dropped.verifier} dropped by verifier · ${result.dropped.filtered} filtered`,
-    ),
+        `${result.dropped.verifier} dropped by verifier · ${result.dropped.filtered} filtered`
+    )
   );
   out.push(
     c.gray(
       `tokens: ${cost.usage.inputTokens} in / ${cost.usage.outputTokens} out / ` +
-        `${cost.usage.cacheReadTokens} cached · ~$${cost.costUsd.toFixed(4)}`,
-    ),
+        `${cost.usage.cacheReadTokens} cached · ~$${cost.costUsd.toFixed(4)}`
+    )
   );
-  return out.join("\n");
+  return out.join('\n');
 }
 
 export { c as colors };

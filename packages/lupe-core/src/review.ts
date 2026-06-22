@@ -1,4 +1,4 @@
-import type { DiffFile } from "./diff";
+import type { DiffFile } from './diff';
 
 /** Owner/repo coordinates. */
 export interface RepoRef {
@@ -12,7 +12,7 @@ export interface PullRequestRef extends RepoRef {
 
 /** What is being reviewed: a GitHub PR (Action / `review <pr>`) or a local diff (CLI). */
 export interface ReviewTarget {
-  readonly kind: "pull_request" | "local";
+  readonly kind: 'pull_request' | 'local';
   readonly repo?: RepoRef;
   readonly pullNumber?: number;
   readonly baseRef?: string;

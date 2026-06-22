@@ -9,5 +9,5 @@ export function fnv1a(input: string): string {
     // 32-bit FNV prime multiply via shifts to stay in uint32 range.
     hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0");
+  return hash.toString(16).padStart(8, '0');
 }

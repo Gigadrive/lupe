@@ -1,48 +1,48 @@
-name: "lupe AI code review"
-description: "Platform- and provider-agnostic AI code review. Bring your own model tokens."
-author: "Gigadrive"
+name: 'lupe AI code review'
+description: 'Platform- and provider-agnostic AI code review. Bring your own model tokens.'
+author: 'Gigadrive'
 branding:
-  icon: "search"
-  color: "purple"
+  icon: 'search'
+  color: 'purple'
 
 inputs:
   github-token:
-    description: "Token used to read the PR and post review comments."
+    description: 'Token used to read the PR and post review comments.'
     default: ${{ github.token }}
   provider:
-    description: "Model provider: anthropic | openai | google | bedrock | openai-compatible | gateway"
-    default: "anthropic"
+    description: 'Model provider: anthropic | openai | google | bedrock | openai-compatible | gateway'
+    default: 'anthropic'
   models:
     description: 'JSON map of task→model id, e.g. {"review":"claude-opus-4-8"}'
-    default: ""
+    default: ''
   profile:
-    description: "Review profile: chill | assertive"
-    default: "chill"
+    description: 'Review profile: chill | assertive'
+    default: 'chill'
   base-url:
-    description: "Custom base URL (for openai-compatible / gateway)."
-    default: ""
+    description: 'Custom base URL (for openai-compatible / gateway).'
+    default: ''
   max-files:
-    description: "Maximum number of changed files to review."
-    default: ""
+    description: 'Maximum number of changed files to review.'
+    default: ''
   max-findings:
-    description: "Maximum number of findings to keep."
-    default: ""
+    description: 'Maximum number of findings to keep.'
+    default: ''
   thorough:
-    description: "Use the strongest model and extra passes."
-    default: "false"
+    description: 'Use the strongest model and extra passes.'
+    default: 'false'
   skip-draft:
-    description: "Skip draft pull requests."
-    default: "true"
+    description: 'Skip draft pull requests.'
+    default: 'true'
   fail-on-severity:
-    description: "Fail the job if any finding is at/above this severity: none | critical | high | medium | low"
-    default: "none"
+    description: 'Fail the job if any finding is at/above this severity: none | critical | high | medium | low'
+    default: 'none'
 
 outputs:
   findings:
-    description: "Number of findings posted."
+    description: 'Number of findings posted.'
   cost-usd:
-    description: "Approximate USD cost of the review."
+    description: 'Approximate USD cost of the review.'
 
 runs:
-  using: "node24"
-  main: "dist/index.js"
+  using: 'node24'
+  main: 'dist/index.js'

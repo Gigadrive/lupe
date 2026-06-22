@@ -1,9 +1,9 @@
 ---
-"@gigadrive/lupe-core": minor
-"@gigadrive/lupe-git": minor
-"@gigadrive/lupe-github": minor
-"@gigadrive/lupe-sdk": minor
-"@gigadrive/lupe": minor
+'@gigadrive/lupe-core': minor
+'@gigadrive/lupe-git': minor
+'@gigadrive/lupe-github': minor
+'@gigadrive/lupe-sdk': minor
+'@gigadrive/lupe': minor
 ---
 
 Initial release of **lupe** — a platform- and provider-agnostic, BYO-token AI code review agent.

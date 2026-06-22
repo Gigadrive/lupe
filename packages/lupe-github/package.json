@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "GitHub transport for lupe: paginated diff fetch, batched review posting, sticky summary, and thread resolution.",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,9 +15,6 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -29,18 +29,17 @@
   "dependencies": {
     "@gigadrive/lupe-core": "workspace:*",
     "@gigadrive/lupe-git": "workspace:*",
-    "@octokit/rest": "catalog:",
     "@octokit/plugin-retry": "catalog:",
     "@octokit/plugin-throttling": "catalog:",
-    "@octokit/graphql": "catalog:"
+    "@octokit/rest": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "effect": "catalog:"
   },
   "peerDependencies": {
     "effect": ">=3.21.0 <4"
-  },
-  "devDependencies": {
-    "effect": "catalog:",
-    "@types/node": "catalog:",
-    "@repo/typescript-config": "workspace:*"
   },
   "engines": {
     "node": ">=20.18.0"

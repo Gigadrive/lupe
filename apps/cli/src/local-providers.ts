@@ -1,5 +1,7 @@
-import { spawn } from "node:child_process";
-import { Effect, Layer } from "effect";
+import { spawn } from 'node:child_process';
+
+import { Effect, Layer } from 'effect';
+
 import {
   AiModel,
   EMPTY_USAGE,
@@ -12,8 +14,9 @@ import {
   type GenerateFindingsResult,
   type VerifyInput,
   type VerifyResult,
-} from "@gigadrive/lupe-core";
-import { colors } from "./render";
+} from '@gigadrive/lupe-core';
+
+import { colors } from './render';
 
 /**
  * Local-credential AI backends. These spawn the user's OWN already-authenticated
@@ -35,8 +38,8 @@ function tryParse(text: string): unknown {
 }
 
 /** Extract the first balanced `[...]` / `{...}` block from arbitrary text. */
-export function extractFirstJson(text: string, open: "[" | "{"): string | undefined {
-  const close = open === "[" ? "]" : "}";
+export function extractFirstJson(text: string, open: '[' | '{'): string | undefined {
+  const close = open === '[' ? ']' : '}';
   const start = text.indexOf(open);
   if (start === -1) return undefined;
   let depth = 0;
@@ -46,7 +49,7 @@ export function extractFirstJson(text: string, open: "[" | "{"): string | undefi
     const ch = text[i];
     if (inString) {
       if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
+      else if (ch === '\\') escaped = true;
       else if (ch === '"') inString = false;
       continue;
     }
@@ -62,7 +65,7 @@ export function extractFirstJson(text: string, open: "[" | "{"): string | undefi
 
 /** Coerce model text into validated findings (lenient — drops invalid elements). */
 export function coerceFindings(text: string): Finding[] {
-  const block = extractFirstJson(text, "[");
+  const block = extractFirstJson(text, '[');
   const parsed = block ? tryParse(block) : undefined;
   if (!Array.isArray(parsed)) return [];
   const findings: Finding[] = [];
@@ -74,14 +77,14 @@ export function coerceFindings(text: string): Finding[] {
 }
 
 export function coerceVerify(text: string): { grounded: boolean; reason: string } {
-  const block = extractFirstJson(text, "{");
+  const block = extractFirstJson(text, '{');
   const parsed = block ? tryParse(block) : undefined;
-  if (parsed && typeof parsed === "object") {
+  if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
-    return { grounded: obj.grounded === true, reason: typeof obj.reason === "string" ? obj.reason : "" };
+    return { grounded: obj.grounded === true, reason: typeof obj.reason === 'string' ? obj.reason : '' };
   }
   // If the model couldn't produce JSON, default to keeping the finding.
-  return { grounded: true, reason: "verifier output unparsable; kept" };
+  return { grounded: true, reason: 'verifier output unparsable; kept' };
 }
 
 // ---------------------------------------------------------------------------
@@ -90,19 +93,19 @@ export function coerceVerify(text: string): { grounded: boolean; reason: string 
 
 function runCommand(command: string, args: readonly string[], input: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args as string[], { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-    child.on("error", (err: NodeJS.ErrnoException) => {
+    const child = spawn(command, args as string[], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+    child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+    child.on('error', (err: NodeJS.ErrnoException) => {
       reject(
-        err.code === "ENOENT"
+        err.code === 'ENOENT'
           ? new Error(`'${command}' was not found on PATH. Install it and log in, then retry.`)
-          : err,
+          : err
       );
     });
-    child.on("close", (code) => {
+    child.on('close', (code) => {
       if (code === 0) resolve(stdout);
       else reject(new Error(stderr.trim() || `${command} exited with code ${code}`));
     });
@@ -111,7 +114,7 @@ function runCommand(command: string, args: readonly string[], input: string): Pr
 }
 
 interface Backend {
-  readonly label: "claude-cli" | "codex-cli";
+  readonly label: 'claude-cli' | 'codex-cli';
   readonly command: string;
   readonly args: readonly string[];
   /** Extract the model's text from the backend's raw stdout. */
@@ -119,12 +122,12 @@ interface Backend {
 }
 
 const CLAUDE_BACKEND: Backend = {
-  label: "claude-cli",
-  command: "claude",
-  args: ["-p", "--output-format", "json"],
+  label: 'claude-cli',
+  command: 'claude',
+  args: ['-p', '--output-format', 'json'],
   extractText: (stdout) => {
     const parsed = tryParse(stdout.trim());
-    if (parsed && typeof parsed === "object" && typeof (parsed as { result?: unknown }).result === "string") {
+    if (parsed && typeof parsed === 'object' && typeof (parsed as { result?: unknown }).result === 'string') {
       return (parsed as { result: string }).result;
     }
     return stdout;
@@ -132,13 +135,13 @@ const CLAUDE_BACKEND: Backend = {
 };
 
 const CODEX_BACKEND: Backend = {
-  label: "codex-cli",
-  command: "codex",
-  args: ["exec", "--json", "-"],
+  label: 'codex-cli',
+  command: 'codex',
+  args: ['exec', '--json', '-'],
   extractText: (stdout) => {
     // codex emits JSONL events; collect the longest string leaf (the assistant text).
-    let best = "";
-    for (const line of stdout.split("\n")) {
+    let best = '';
+    for (const line of stdout.split('\n')) {
       const value = tryParse(line.trim());
       if (value === undefined) continue;
       for (const leaf of stringLeaves(value)) if (leaf.length >= best.length) best = leaf;
@@ -148,9 +151,9 @@ const CODEX_BACKEND: Backend = {
 };
 
 function* stringLeaves(value: unknown): Generator<string> {
-  if (typeof value === "string") yield value;
+  if (typeof value === 'string') yield value;
   else if (Array.isArray(value)) for (const v of value) yield* stringLeaves(v);
-  else if (value && typeof value === "object") for (const v of Object.values(value)) yield* stringLeaves(v);
+  else if (value && typeof value === 'object') for (const v of Object.values(value)) yield* stringLeaves(v);
 }
 
 function makeLocalModel(backend: Backend): AiModelService {
@@ -203,16 +206,16 @@ function printNotice(label: string, conflictingEnv?: string): void {
     process.stderr.write(
       colors.yellow(
         `⚠ Using your local ${label} login is unofficial and may violate the provider's Terms of Service.\n` +
-          `  lupe only invokes your already-authenticated CLI and never handles tokens. Prefer API keys for shared/CI use.\n`,
-      ),
+          `  lupe only invokes your already-authenticated CLI and never handles tokens. Prefer API keys for shared/CI use.\n`
+      )
     );
     noticePrinted = true;
   }
   if (conflictingEnv && process.env[conflictingEnv]) {
     process.stderr.write(
       colors.yellow(
-        `⚠ ${conflictingEnv} is set and may override your subscription login. Unset it to use the subscription.\n`,
-      ),
+        `⚠ ${conflictingEnv} is set and may override your subscription login. Unset it to use the subscription.\n`
+      )
     );
   }
 }
@@ -220,7 +223,7 @@ function printNotice(label: string, conflictingEnv?: string): void {
 /** Opt-in layer backed by the local Claude Code login (`claude -p`). */
 export function ClaudeCliLive(): Layer.Layer<AiModel> {
   return Layer.sync(AiModel, () => {
-    printNotice("Claude Code", "ANTHROPIC_API_KEY");
+    printNotice('Claude Code', 'ANTHROPIC_API_KEY');
     return makeLocalModel(CLAUDE_BACKEND);
   });
 }
@@ -228,12 +231,12 @@ export function ClaudeCliLive(): Layer.Layer<AiModel> {
 /** Opt-in layer backed by the local Codex login (`codex exec`). */
 export function CodexCliLive(): Layer.Layer<AiModel> {
   return Layer.sync(AiModel, () => {
-    printNotice("Codex", "OPENAI_API_KEY");
+    printNotice('Codex', 'OPENAI_API_KEY');
     return makeLocalModel(CODEX_BACKEND);
   });
 }
 
-export const LOCAL_PROVIDERS = ["claude-cli", "codex-cli"] as const;
+export const LOCAL_PROVIDERS = ['claude-cli', 'codex-cli'] as const;
 export type LocalProvider = (typeof LOCAL_PROVIDERS)[number];
 
 export function isLocalProvider(p: string): p is LocalProvider {

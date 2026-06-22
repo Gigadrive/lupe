@@ -1,24 +1,24 @@
 packages:
-  - "packages/*"
-  - "apps/*"
+  - 'packages/*'
+  - 'apps/*'
 
 # Single source of truth for dependency versions across the monorepo.
 # Reference with "catalog:" in any package's package.json.
 catalog:
   # --- Effect quartet (pin together; pre-1.0, version-locked) ---
   effect: 3.21.4
-  "@effect/platform": 0.96.2
-  "@effect/platform-node": 0.107.0
-  "@effect/cli": 0.75.2
+  '@effect/platform': 0.96.2
+  '@effect/platform-node': 0.107.0
+  '@effect/cli': 0.75.2
 
   # --- Vercel AI SDK 6 + provider packages (pin together) ---
   ai: 6.0.208
-  "@ai-sdk/anthropic": 3.0.85
-  "@ai-sdk/openai": 3.0.73
-  "@ai-sdk/google": 3.0.83
-  "@ai-sdk/amazon-bedrock": 4.0.119
-  "@ai-sdk/openai-compatible": 2.0.51
-  "@ai-sdk/gateway": 3.0.133
+  '@ai-sdk/anthropic': 3.0.85
+  '@ai-sdk/openai': 3.0.73
+  '@ai-sdk/google': 3.0.83
+  '@ai-sdk/amazon-bedrock': 4.0.119
+  '@ai-sdk/openai-compatible': 2.0.51
+  '@ai-sdk/gateway': 3.0.133
 
   # --- Schemas / config / parsing ---
   zod: 4.4.3
@@ -26,16 +26,15 @@ catalog:
   yaml: 2.9.0
 
   # --- GitHub transport ---
-  "@actions/core": 3.0.1
-  "@actions/github": 9.1.1
-  "@octokit/rest": 22.0.1
-  "@octokit/plugin-retry": 8.1.0
-  "@octokit/plugin-throttling": 11.0.3
-  "@octokit/graphql": 9.0.3
+  '@actions/core': 3.0.1
+  '@actions/github': 9.1.1
+  '@octokit/rest': 22.0.1
+  '@octokit/plugin-retry': 8.1.0
+  '@octokit/plugin-throttling': 11.0.3
 
   # --- CLI ergonomics + git ---
-  "@clack/prompts": 1.6.0
+  '@clack/prompts': 1.6.0
   simple-git: 3.36.0
 
   # --- shared types ---
-  "@types/node": 24.7.1
+  '@types/node': 24.7.1

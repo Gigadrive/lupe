@@ -1,14 +1,15 @@
-import { Effect } from "effect";
-import type { DiffFile } from "../diff";
-import type { Finding } from "../finding";
-import type { CostSummary, ReviewTarget, TokenUsage } from "../review";
-import { addUsage, EMPTY_USAGE } from "../review";
-import { AiModel, type AiError } from "../ai/model";
-import { modelCost } from "../ai/pricing";
-import { renderSummaryMarkdown } from "../render/markdown";
-import { generateCandidates, type GenerateCandidatesOptions } from "./engine";
-import { verifyFindings } from "./verify";
-import { applyFilters, type FilterOptions } from "./filter";
+import { Effect } from 'effect';
+
+import { AiModel, type AiError } from '../ai/model';
+import { modelCost } from '../ai/pricing';
+import type { DiffFile } from '../diff';
+import type { Finding } from '../finding';
+import { renderSummaryMarkdown } from '../render/markdown';
+import type { CostSummary, ReviewTarget, TokenUsage } from '../review';
+import { addUsage, EMPTY_USAGE } from '../review';
+import { generateCandidates, type GenerateCandidatesOptions } from './engine';
+import { applyFilters, type FilterOptions } from './filter';
+import { verifyFindings } from './verify';
 
 export interface RunReviewOptions extends GenerateCandidatesOptions, FilterOptions {
   /** Run the grounding verifier (default true). */
@@ -48,7 +49,7 @@ class CostAccumulator {
 export function runReview(
   files: readonly DiffFile[],
   target: ReviewTarget | undefined,
-  options: RunReviewOptions = {},
+  options: RunReviewOptions = {}
 ): Effect.Effect<ReviewRunResult, AiError, AiModel> {
   return Effect.gen(function* () {
     const cost = new CostAccumulator();

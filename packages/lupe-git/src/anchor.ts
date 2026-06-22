@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect } from 'effect';
+
 import {
   AnchorError,
   type Anchor,
@@ -6,7 +7,7 @@ import {
   type DiffFile,
   type Finding,
   type Side,
-} from "@gigadrive/lupe-core";
+} from '@gigadrive/lupe-core';
 
 /**
  * GitHub rejects review comments whose line is not part of the diff
@@ -22,12 +23,12 @@ export function commentableLines(file: DiffFile): CommentableLine[] {
   const out: CommentableLine[] = [];
   for (const hunk of file.hunks) {
     for (const line of hunk.lines) {
-      if (line.kind === "add" && line.newLine !== undefined) {
-        out.push({ line: line.newLine, side: "RIGHT" });
-      } else if (line.kind === "context" && line.newLine !== undefined) {
-        out.push({ line: line.newLine, side: "RIGHT" });
-      } else if (line.kind === "del" && line.oldLine !== undefined) {
-        out.push({ line: line.oldLine, side: "LEFT" });
+      if (line.kind === 'add' && line.newLine !== undefined) {
+        out.push({ line: line.newLine, side: 'RIGHT' });
+      } else if (line.kind === 'context' && line.newLine !== undefined) {
+        out.push({ line: line.newLine, side: 'RIGHT' });
+      } else if (line.kind === 'del' && line.oldLine !== undefined) {
+        out.push({ line: line.oldLine, side: 'LEFT' });
       }
     }
   }
@@ -55,10 +56,10 @@ export interface AnchorResolution {
  * range touches no diff line on its side (the 422 case).
  */
 export function resolveAnchor(
-  finding: Pick<Finding, "path" | "startLine" | "endLine" | "side">,
-  file: DiffFile,
+  finding: Pick<Finding, 'path' | 'startLine' | 'endLine' | 'side'>,
+  file: DiffFile
 ): AnchorResolution {
-  const side: Side = finding.side ?? "RIGHT";
+  const side: Side = finding.side ?? 'RIGHT';
   const lo = Math.min(finding.startLine, finding.endLine);
   const hi = Math.max(finding.startLine, finding.endLine);
   const commentable = commentableLineSet(file, side);
@@ -105,17 +106,17 @@ export function resolveAnchor(
 
 /** Effectful variant: fail with a typed AnchorError instead of returning a flag. */
 export function toAnchor(
-  finding: Pick<Finding, "path" | "startLine" | "endLine" | "side">,
-  file: DiffFile,
+  finding: Pick<Finding, 'path' | 'startLine' | 'endLine' | 'side'>,
+  file: DiffFile
 ): Effect.Effect<Anchor, AnchorError> {
   const resolution = resolveAnchor(finding, file);
   if (resolution.ok && resolution.anchor) return Effect.succeed(resolution.anchor);
   return Effect.fail(
     new AnchorError({
-      message: resolution.reason ?? "could not anchor finding",
+      message: resolution.reason ?? 'could not anchor finding',
       path: finding.path,
       line: finding.endLine,
       side: finding.side,
-    }),
+    })
   );
 }

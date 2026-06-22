@@ -1,4 +1,5 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer } from 'effect';
+
 import {
   AiSdkLive,
   GitHubClient,
@@ -12,13 +13,13 @@ import {
   type ReviewProfile,
   type ReviewTarget,
   type SarifLog,
-} from "@gigadrive/lupe-core";
-import { RepoSourceLive, compressDiff, parseUnifiedDiff } from "@gigadrive/lupe-git";
-import { GitHubClientLive, anchorFindings } from "@gigadrive/lupe-github";
+} from '@gigadrive/lupe-core';
+import { RepoSourceLive, compressDiff, parseUnifiedDiff } from '@gigadrive/lupe-git';
+import { GitHubClientLive, anchorFindings } from '@gigadrive/lupe-github';
 
-export type { Finding, LupeAiConfig, SarifLog, ReviewProfile } from "@gigadrive/lupe-core";
+export type { Finding, LupeAiConfig, SarifLog, ReviewProfile } from '@gigadrive/lupe-core';
 
-export const VERSION = "0.0.0";
+export const VERSION = '0.0.0';
 
 /** Shared review knobs for the programmatic API. */
 export interface ReviewTuning {
@@ -51,7 +52,7 @@ function toResult(findings: readonly Finding[], summaryMarkdown: string, cost: C
   return { findings, summaryMarkdown, cost, sarif: () => renderSarif(findings) };
 }
 
-const EMPTY_RESULT: ReviewResult = toResult([], "", EMPTY_COST);
+const EMPTY_RESULT: ReviewResult = toResult([], '', EMPTY_COST);
 
 // ---------------------------------------------------------------------------
 // reviewDiff — review a raw diff or a local git range
@@ -80,7 +81,7 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
       options.diff !== undefined
         ? parseUnifiedDiff(options.diff)
         : yield* (yield* RepoSource).acquireDiff({
-            kind: "local",
+            kind: 'local',
             baseRef: options.base,
             headRef: options.head,
           });
@@ -92,7 +93,7 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
     if (compressed.files.length === 0) return EMPTY_RESULT;
 
     const target: ReviewTarget = {
-      kind: "local",
+      kind: 'local',
       baseRef: options.base,
       headRef: options.head,
       ...options.target,
@@ -102,7 +103,7 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
       maxFindings: options.maxFindings,
       confidenceThreshold: options.confidenceThreshold,
       verify: options.verify,
-      task: options.thorough ? "deep" : "review",
+      task: options.thorough ? 'deep' : 'review',
     });
     return toResult(result.findings, result.summaryMarkdown, result.cost);
   });
@@ -152,14 +153,14 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
 
     const result = yield* runReview(
       compressed.files,
-      { kind: "pull_request", repo: pr, pullNumber: pr.number, headSha: options.headSha },
+      { kind: 'pull_request', repo: pr, pullNumber: pr.number, headSha: options.headSha },
       {
         profile: options.profile,
         maxFindings: options.maxFindings,
         confidenceThreshold: options.confidenceThreshold,
         verify: options.verify,
-        task: options.thorough ? "deep" : "review",
-      },
+        task: options.thorough ? 'deep' : 'review',
+      }
     );
 
     let posted = false;

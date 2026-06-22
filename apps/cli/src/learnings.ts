@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
-import * as fs from "node:fs/promises";
-import * as nodePath from "node:path";
-import { Effect } from "effect";
-import { ConfigError } from "@gigadrive/lupe-core";
+import { existsSync } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import * as nodePath from 'node:path';
+
+import { Effect } from 'effect';
+
+import { ConfigError } from '@gigadrive/lupe-core';
 
 /**
  * A minimal, file-based learnings store (`.lupe/learnings.json`). Patterns added
@@ -11,8 +13,8 @@ import { ConfigError } from "@gigadrive/lupe-core";
  * swap this for an embedding-based similarity store behind the same shape.
  */
 
-const STORE_DIR = ".lupe";
-const STORE_FILE = "learnings.json";
+const STORE_DIR = '.lupe';
+const STORE_FILE = 'learnings.json';
 
 interface LearningsData {
   suppress: string[];
@@ -25,7 +27,7 @@ function storePath(cwd: string): string {
 async function readData(path: string): Promise<LearningsData> {
   if (!existsSync(path)) return { suppress: [] };
   try {
-    const parsed = JSON.parse(await fs.readFile(path, "utf8")) as Partial<LearningsData>;
+    const parsed = JSON.parse(await fs.readFile(path, 'utf8')) as Partial<LearningsData>;
     return { suppress: Array.isArray(parsed.suppress) ? parsed.suppress : [] };
   } catch {
     return { suppress: [] };
@@ -45,8 +47,8 @@ export function addLearning(cwd: string, pattern: string): Effect.Effect<void, C
       const path = storePath(cwd);
       const data = await readData(path);
       if (!data.suppress.includes(pattern)) data.suppress.push(pattern);
-      await fs.writeFile(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+      await fs.writeFile(path, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
     },
-    catch: (cause) => new ConfigError({ message: "failed to write learnings", cause }),
+    catch: (cause) => new ConfigError({ message: 'failed to write learnings', cause }),
   });
 }

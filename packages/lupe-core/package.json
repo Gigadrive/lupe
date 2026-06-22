@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "The lupe review engine: finding model, provider registry, agent loop, grounding verifier, filter chain, and renderers.",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,9 +15,6 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -27,22 +27,22 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "ai": "catalog:",
-    "@ai-sdk/anthropic": "catalog:",
-    "@ai-sdk/openai": "catalog:",
-    "@ai-sdk/google": "catalog:",
     "@ai-sdk/amazon-bedrock": "catalog:",
-    "@ai-sdk/openai-compatible": "catalog:",
+    "@ai-sdk/anthropic": "catalog:",
     "@ai-sdk/gateway": "catalog:",
+    "@ai-sdk/google": "catalog:",
+    "@ai-sdk/openai": "catalog:",
+    "@ai-sdk/openai-compatible": "catalog:",
+    "ai": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "effect": "catalog:"
   },
   "peerDependencies": {
     "effect": ">=3.21.0 <4"
-  },
-  "devDependencies": {
-    "effect": "catalog:",
-    "@types/node": "catalog:",
-    "@repo/typescript-config": "workspace:*"
   },
   "engines": {
     "node": ">=20.18.0"

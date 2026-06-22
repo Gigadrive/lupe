@@ -1,15 +1,15 @@
-import type { Finding, Severity } from "../finding";
-import { SEVERITY_RANK, isAdvisory } from "../finding";
-import type { CostSummary } from "../review";
+import type { Finding, Severity } from '../finding';
+import { SEVERITY_RANK, isAdvisory } from '../finding';
+import type { CostSummary } from '../review';
 
 /** Hidden marker used to find-and-update the single sticky summary comment. */
-export const SUMMARY_MARKER = "<!-- lupe-summary -->";
+export const SUMMARY_MARKER = '<!-- lupe-summary -->';
 
 /** Visible marker in every inline comment footer — lets the transport find lupe's own threads. */
-export const INLINE_MARKER = "🔍 lupe";
+export const INLINE_MARKER = '🔍 lupe';
 
-const STATE_PREFIX = "<!-- lupe-state:";
-const STATE_SUFFIX = "-->";
+const STATE_PREFIX = '<!-- lupe-state:';
+const STATE_SUFFIX = '-->';
 
 /** Persisted, machine-readable review state embedded in the sticky comment. */
 export interface LupeReviewState {
@@ -30,7 +30,7 @@ export function parseState(body: string): LupeReviewState | undefined {
   const json = body.slice(start + STATE_PREFIX.length, end).trim();
   try {
     const parsed: unknown = JSON.parse(json);
-    if (parsed && typeof parsed === "object") return parsed as LupeReviewState;
+    if (parsed && typeof parsed === 'object') return parsed as LupeReviewState;
   } catch {
     return undefined;
   }
@@ -38,11 +38,11 @@ export function parseState(body: string): LupeReviewState | undefined {
 }
 
 const SEVERITY_EMOJI: Record<Severity, string> = {
-  critical: "🛑",
-  high: "🔴",
-  medium: "🟠",
-  low: "🟡",
-  info: "🔵",
+  critical: '🛑',
+  high: '🔴',
+  medium: '🟠',
+  low: '🟡',
+  info: '🔵',
 };
 
 export function severityBadge(severity: Severity): string {
@@ -51,24 +51,24 @@ export function severityBadge(severity: Severity): string {
 
 /** Build a GitHub ```suggestion block. */
 export function suggestionBlock(code: string): string {
-  const body = code.replace(/\n+$/, "");
-  return ["```suggestion", body, "```"].join("\n");
+  const body = code.replace(/\n+$/, '');
+  return ['```suggestion', body, '```'].join('\n');
 }
 
 /** Render the body of a single anchored inline comment. */
 export function renderInlineComment(finding: Finding): string {
   const lines: string[] = [];
   lines.push(`${severityBadge(finding.severity)} · \`${finding.category}\` — **${finding.title}**`);
-  lines.push("");
+  lines.push('');
   lines.push(finding.message.trim());
   if (finding.suggestion && finding.suggestion.trim().length > 0) {
-    lines.push("");
+    lines.push('');
     lines.push(suggestionBlock(finding.suggestion));
   }
   const pct = Math.round(finding.confidence * 100);
-  lines.push("");
+  lines.push('');
   lines.push(`<sub>${INLINE_MARKER} · \`${finding.ruleId}\` · confidence ${pct}%</sub>`);
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 function countBySeverity(findings: readonly Finding[]): Record<Severity, number> {
@@ -102,40 +102,40 @@ export function renderSummaryMarkdown(findings: readonly Finding[], options: Sum
 
   const out: string[] = [];
   out.push(SUMMARY_MARKER);
-  out.push(`## 🔍 ${options.title ?? "lupe review"}`);
-  out.push("");
+  out.push(`## 🔍 ${options.title ?? 'lupe review'}`);
+  out.push('');
 
   if (findings.length === 0) {
-    out.push("No issues found. ✅");
+    out.push('No issues found. ✅');
   } else {
     out.push(
-      `Found **${findings.length}** ${findings.length === 1 ? "finding" : "findings"} ` +
-        `(${actionable} actionable, ${advisory} advisory).`,
+      `Found **${findings.length}** ${findings.length === 1 ? 'finding' : 'findings'} ` +
+        `(${actionable} actionable, ${advisory} advisory).`
     );
-    out.push("");
-    out.push("| Severity | Count |");
-    out.push("| --- | --- |");
-    for (const sev of ["critical", "high", "medium", "low", "info"] as const) {
+    out.push('');
+    out.push('| Severity | Count |');
+    out.push('| --- | --- |');
+    for (const sev of ['critical', 'high', 'medium', 'low', 'info'] as const) {
       if (counts[sev] > 0) out.push(`| ${SEVERITY_EMOJI[sev]} ${sev} | ${counts[sev]} |`);
     }
-    out.push("");
-    out.push("<details><summary>All findings</summary>");
-    out.push("");
+    out.push('');
+    out.push('<details><summary>All findings</summary>');
+    out.push('');
     for (const f of sortFindings(findings)) {
       const loc = `\`${f.path}:${f.startLine}\``;
       out.push(`- ${SEVERITY_EMOJI[f.severity]} ${loc} — ${f.title} <sub>(${f.category})</sub>`);
     }
-    out.push("");
-    out.push("</details>");
+    out.push('');
+    out.push('</details>');
   }
 
   if (options.cost) {
     const c = options.cost;
-    out.push("");
+    out.push('');
     out.push(
       `<sub>💸 ${c.usage.inputTokens.toLocaleString()} in · ` +
         `${c.usage.outputTokens.toLocaleString()} out · ` +
-        `${c.usage.cacheReadTokens.toLocaleString()} cached · ~$${c.costUsd.toFixed(4)}</sub>`,
+        `${c.usage.cacheReadTokens.toLocaleString()} cached · ~$${c.costUsd.toFixed(4)}</sub>`
     );
   }
 
@@ -145,26 +145,26 @@ export function renderSummaryMarkdown(findings: readonly Finding[], options: Sum
       lastReviewedSha: options.headSha,
       findingCount: findings.length,
     };
-    out.push("");
+    out.push('');
     out.push(encodeState(state));
   }
 
-  return out.join("\n");
+  return out.join('\n');
 }
 
 /** Plain-markdown rendering for the CLI `--print` path (colourised separately). */
 export function renderTerminal(findings: readonly Finding[]): string {
-  if (findings.length === 0) return "✅ No issues found.";
+  if (findings.length === 0) return '✅ No issues found.';
   const out: string[] = [];
   for (const f of sortFindings(findings)) {
     out.push(`${severityBadge(f.severity)} ${f.path}:${f.startLine}  ${f.title}`);
     out.push(`  ${f.category} · ${f.ruleId} · confidence ${Math.round(f.confidence * 100)}%`);
-    out.push(`  ${f.message.trim().replace(/\n/g, "\n  ")}`);
+    out.push(`  ${f.message.trim().replace(/\n/g, '\n  ')}`);
     if (f.suggestion) {
-      out.push("  suggestion:");
-      out.push(f.suggestion.replace(/^/gm, "    "));
+      out.push('  suggestion:');
+      out.push(f.suggestion.replace(/^/gm, '    '));
     }
-    out.push("");
+    out.push('');
   }
-  return out.join("\n");
+  return out.join('\n');
 }

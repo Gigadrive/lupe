@@ -1,5 +1,5 @@
-import type { DiffFile } from "@gigadrive/lupe-core";
-import { renderDiffPrompt, serialiseFileDiff } from "@gigadrive/lupe-core";
+import type { DiffFile } from '@gigadrive/lupe-core';
+import { renderDiffPrompt, serialiseFileDiff } from '@gigadrive/lupe-core';
 
 // Re-export the core serialisers so consumers can keep importing them from here.
 export { renderDiffPrompt, serialiseFileDiff };
@@ -31,20 +31,20 @@ const GENERATED_PATTERNS: readonly RegExp[] = [
 ];
 
 const LOCKFILES: ReadonlySet<string> = new Set([
-  "package-lock.json",
-  "pnpm-lock.yaml",
-  "yarn.lock",
-  "bun.lock",
-  "bun.lockb",
-  "composer.lock",
-  "Cargo.lock",
-  "poetry.lock",
-  "Gemfile.lock",
-  "go.sum",
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lock',
+  'bun.lockb',
+  'composer.lock',
+  'Cargo.lock',
+  'poetry.lock',
+  'Gemfile.lock',
+  'go.sum',
 ]);
 
 function basename(path: string): string {
-  const idx = path.lastIndexOf("/");
+  const idx = path.lastIndexOf('/');
   return idx === -1 ? path : path.slice(idx + 1);
 }
 
@@ -63,7 +63,7 @@ export function isGenerated(path: string): boolean {
 export function matchesFilters(path: string, filters: readonly string[]): boolean {
   let included = true;
   for (const raw of filters) {
-    const negated = raw.startsWith("!");
+    const negated = raw.startsWith('!');
     const pattern = negated ? raw.slice(1) : raw;
     if (globToRegExp(pattern).test(path)) included = !negated;
   }
@@ -72,26 +72,26 @@ export function matchesFilters(path: string, filters: readonly string[]): boolea
 
 function globToRegExp(glob: string): RegExp {
   // Minimal glob: ** => any, * => segment, ? => one char. Anchored loosely.
-  let re = "";
+  let re = '';
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i]!;
-    if (c === "*") {
-      if (glob[i + 1] === "*") {
-        re += ".*";
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        re += '.*';
         i++;
-        if (glob[i + 1] === "/") i++;
+        if (glob[i + 1] === '/') i++;
       } else {
-        re += "[^/]*";
+        re += '[^/]*';
       }
-    } else if (c === "?") re += "[^/]";
-    else if (".+^${}()|[]\\".includes(c)) re += `\\${c}`;
-    else if (c === "/") re += "/";
+    } else if (c === '?') re += '[^/]';
+    else if ('.+^${}()|[]\\'.includes(c)) re += `\\${c}`;
+    else if (c === '/') re += '/';
     else re += c;
   }
   return new RegExp(`(^|/)${re}$|^${re}$`);
 }
 
-export type DropReason = "binary" | "generated" | "lockfile" | "filtered" | "no-hunks" | "budget";
+export type DropReason = 'binary' | 'generated' | 'lockfile' | 'filtered' | 'no-hunks' | 'budget';
 
 export interface DroppedFile {
   readonly path: string;
@@ -123,7 +123,7 @@ function relevanceScore(file: DiffFile): number {
   if (/(^|\/)(test|tests|__tests__|spec)\//.test(path) || /\.(test|spec)\./.test(path)) score -= 20;
   if (/\.(md|mdx|txt|rst)$/.test(path)) score -= 30;
   if (/\.(json|ya?ml|toml|ini|cfg)$/.test(path)) score -= 10;
-  if (file.status === "added") score += 10;
+  if (file.status === 'added') score += 10;
   return score;
 }
 
@@ -135,15 +135,15 @@ export function compressDiff(files: readonly DiffFile[], options: CompressOption
 
   for (const file of files) {
     if (file.binary) {
-      dropped.push({ path: file.path, reason: "binary" });
+      dropped.push({ path: file.path, reason: 'binary' });
     } else if (isLockfile(file.path)) {
-      dropped.push({ path: file.path, reason: "lockfile" });
+      dropped.push({ path: file.path, reason: 'lockfile' });
     } else if (isGenerated(file.path)) {
-      dropped.push({ path: file.path, reason: "generated" });
+      dropped.push({ path: file.path, reason: 'generated' });
     } else if (options.pathFilters && !matchesFilters(file.path, options.pathFilters)) {
-      dropped.push({ path: file.path, reason: "filtered" });
+      dropped.push({ path: file.path, reason: 'filtered' });
     } else if (file.hunks.length === 0) {
-      dropped.push({ path: file.path, reason: "no-hunks" });
+      dropped.push({ path: file.path, reason: 'no-hunks' });
     } else {
       keep.push(file);
     }
@@ -154,7 +154,7 @@ export function compressDiff(files: readonly DiffFile[], options: CompressOption
     options.maxFilesReviewed && ranked.length > options.maxFilesReviewed
       ? ranked.slice(0, options.maxFilesReviewed)
       : ranked;
-  for (const f of ranked.slice(limited.length)) dropped.push({ path: f.path, reason: "budget" });
+  for (const f of ranked.slice(limited.length)) dropped.push({ path: f.path, reason: 'budget' });
 
   const included: DiffFile[] = [];
   let tokens = 0;
@@ -162,7 +162,7 @@ export function compressDiff(files: readonly DiffFile[], options: CompressOption
   for (const file of limited) {
     const cost = estimateTokens(serialiseFileDiff(file));
     if (tokens + cost > maxTokens && included.length > 0) {
-      dropped.push({ path: file.path, reason: "budget" });
+      dropped.push({ path: file.path, reason: 'budget' });
       truncated = true;
       continue;
     }

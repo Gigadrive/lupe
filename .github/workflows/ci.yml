@@ -9,33 +9,43 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  static:
+    name: Format · Lint · Knip
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build typecheck test check:exports
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Format (oxfmt)
+        run: pnpm format
+      - name: Lint (oxlint)
+        run: pnpm lint
+      - name: Dependency hygiene (knip)
+        run: pnpm knip
 
-  # Fails if the committed Action bundle (apps/action/dist) drifts from source.
-  action-dist:
+  build:
+    name: Build · Typecheck · Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Build · typecheck · test · check exports
+        run: pnpm turbo run build typecheck test check:exports
+      - name: Effect language-service check
+        run: pnpm effect:check
+
+  action-dist:
+    name: Action bundle is fresh
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/setup-node-pnpm
       # Build via turbo so the workspace deps (^build) are built before the ncc bundle.
       - run: pnpm turbo run build --filter=@gigadrive/lupe-action
       - name: Verify dist is up to date
