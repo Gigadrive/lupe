@@ -22,7 +22,7 @@
     "@changesets/cli": "2.31.0",
     "@effect/language-service": "0.86.2",
     "@types/node": "24.7.1",
-    "knip": "6.17.2",
+    "knip": "6.18.0",
     "oxfmt": "0.55.0",
     "oxlint": "1.70.0",
     "publint": "0.3.21",
