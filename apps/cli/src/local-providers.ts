@@ -76,12 +76,22 @@ export function coerceFindings(text: string): Finding[] {
   return findings;
 }
 
-export function coerceVerify(text: string): { grounded: boolean; reason: string } {
+export function coerceVerify(text: string): {
+  grounded: boolean;
+  reason: string;
+  suggestionValid?: boolean;
+  impactConfirmed?: boolean;
+} {
   const block = extractFirstJson(text, '{');
   const parsed = block ? tryParse(block) : undefined;
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
-    return { grounded: obj.grounded === true, reason: typeof obj.reason === 'string' ? obj.reason : '' };
+    return {
+      grounded: obj.grounded === true,
+      reason: typeof obj.reason === 'string' ? obj.reason : '',
+      suggestionValid: typeof obj.suggestionValid === 'boolean' ? obj.suggestionValid : undefined,
+      impactConfirmed: typeof obj.impactConfirmed === 'boolean' ? obj.impactConfirmed : undefined,
+    };
   }
   // If the model couldn't produce JSON, default to keeping the finding.
   return { grounded: true, reason: 'verifier output unparsable; kept' };
@@ -184,14 +194,19 @@ function makeLocalModel(backend: Backend): AiModelService {
   const verify = (input: VerifyInput): Effect.Effect<VerifyResult, AiError> =>
     Effect.tryPromise({
       try: async () => {
+        const candidate = input.candidate;
+        const hasSuggestion = candidate.suggestion !== undefined;
         const prompt =
-          `${input.system}\n\nFinding: ${input.candidate.title} — ${input.candidate.message}\n` +
-          `Location: ${input.candidate.path}:${input.candidate.startLine}\n\n` +
-          `Code context:\n${input.evidenceContext}\n\n` +
-          `Return ONLY a JSON object {"grounded": boolean, "reason": string}.`;
+          `${input.system}\n\nFinding (severity=${candidate.severity}): ${candidate.title} — ${candidate.message}\n` +
+          `Location: ${candidate.path}:${candidate.startLine}\n` +
+          (hasSuggestion ? `Proposed suggestion:\n${candidate.suggestion}\n` : '') +
+          `\nCode context:\n${input.evidenceContext}\n\n` +
+          `Return ONLY a JSON object {"grounded": boolean, "reason": string, "impactConfirmed": boolean` +
+          (hasSuggestion ? `, "suggestionValid": boolean` : '') +
+          `}.`;
         const stdout = await runCommand(backend.command, backend.args, prompt);
-        const { grounded, reason } = coerceVerify(backend.extractText(stdout));
-        return { grounded, reason, usage: EMPTY_USAGE, model: backend.label };
+        const { grounded, reason, suggestionValid, impactConfirmed } = coerceVerify(backend.extractText(stdout));
+        return { grounded, reason, suggestionValid, impactConfirmed, usage: EMPTY_USAGE, model: backend.label };
       },
       catch: fail,
     });

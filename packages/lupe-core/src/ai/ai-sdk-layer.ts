@@ -45,6 +45,8 @@ function liftError(error: unknown, provider: string): AiError {
 const VerifySchema = z.object({
   grounded: z.boolean(),
   reason: z.string(),
+  suggestionValid: z.boolean().optional(),
+  impactConfirmed: z.boolean().optional(),
 });
 
 /**
@@ -109,10 +111,17 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
                     `- rule: ${candidate.ruleId}\n` +
                     `- title: ${candidate.title}\n` +
                     `- location: ${candidate.path}:${candidate.startLine}\n` +
-                    `- claim: ${candidate.message}\n\n` +
-                    `Cited code context:\n${input.evidenceContext}\n\n` +
+                    `- claim: ${candidate.message}\n` +
+                    (candidate.suggestion !== undefined
+                      ? `- proposed suggestion (replacement for the anchored range):\n${candidate.suggestion}\n`
+                      : '') +
+                    `\nCited code context:\n${input.evidenceContext}\n\n` +
                     `Decide whether this finding is correct AND grounded in the cited code. ` +
-                    `Set grounded=false if it is speculative, already handled, or not supported by the code.`,
+                    `Set grounded=false if it is speculative, already handled, or not supported by the code. ` +
+                    `Set impactConfirmed=false if the mechanism is real but the claimed impact/severity depends on a precondition not visible here (an off-context caller, an external contract, or unproven attacker-/tenant-controllability).` +
+                    (candidate.suggestion !== undefined
+                      ? ` Also set suggestionValid=false if the proposed suggestion would not correctly fix the problem (e.g. a no-op or code that does not compile).`
+                      : ''),
                 },
               ],
               output: Output.object({ schema: VerifySchema }),
@@ -123,6 +132,8 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
             return {
               grounded: out.grounded,
               reason: out.reason,
+              suggestionValid: out.suggestionValid,
+              impactConfirmed: out.impactConfirmed,
               usage: toTokenUsage(result.totalUsage),
               model: modelId,
             };

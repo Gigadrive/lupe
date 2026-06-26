@@ -2,13 +2,19 @@ import { Effect } from 'effect';
 
 import { AiModel, type AiError } from '../ai/model';
 import type { DiffFile } from '../diff';
-import type { Finding } from '../finding';
+import { SEVERITY_RANK, type Finding, type Severity } from '../finding';
 import { serialiseFileDiff } from '../render/diff-prompt';
 import { EMPTY_USAGE, addUsage, type TokenUsage } from '../review';
 
-const VERIFY_SYSTEM = `You are lupe's grounding verifier. You receive a single candidate code-review finding and the relevant code context. Your job is to keep only findings that are CORRECT and GROUNDED in the cited code.
+/** Severity ceiling applied when the verifier could not confirm a finding's claimed impact. */
+const IMPACT_UNCONFIRMED_CEILING: Severity = 'low';
 
-Set grounded=false when the finding is: speculative, not actually reachable, already handled by nearby code, based on code that isn't shown, a pure style preference, or otherwise not clearly supported by the context. Be skeptical — when in doubt, reject. Keep grounded=true only when the problem is real and visible in the provided code.`;
+const VERIFY_SYSTEM = `You are lupe's grounding verifier. You receive a single candidate code-review finding and the relevant code context. Your job is to keep only findings that are CORRECT and GROUNDED in the cited code, and to reject any proposed fix that would not actually work.
+
+Judge these independently:
+- grounded: set false when the finding is speculative, not actually reachable (e.g. the flagged code has no live caller, or is dead/test-only so its claimed runtime impact cannot occur), already handled by nearby code, based on code that isn't shown, a pure style preference, or otherwise not clearly supported by the context. A finding may be grounded because its *mechanism* is real and visible even if its broader impact is not yet proven (see impactConfirmed). Be skeptical — when in doubt, reject. Keep grounded=true only when the underlying problem is real and visible in the provided code.
+- impactConfirmed: judge whether the finding's claimed *impact and severity* are actually established. Set false when the mechanism is real but the stated consequence (crash, OOM, data loss, overbooking, security breach) rests on a precondition you cannot see in the context or cited evidence — an off-context caller that triggers the path, an external contract assumed to behave a certain way, or unproven attacker-/tenant-controllability of an input. A finding with impactConfirmed=false is KEPT but capped to a low-severity latent-footgun note, not dropped. Set true when the impact is established by the context; omit when there is no elevated impact claim to judge. (A precondition asserted but not shown is speculation, however plausible.)
+- suggestionValid: only when the finding includes a proposed suggestion, set false if that fix is incorrect, incomplete, a no-op, or would not actually resolve the problem (e.g. an expression that always evaluates to the same value, or code that does not compile/parse). A grounded finding with a bad suggestion stays grounded=true — only its broken fix is dropped. Omit the field when there is no suggestion to judge.`;
 
 export interface VerifyOptions {
   /** Bounded concurrency for verifier calls. Default 4. */
@@ -70,8 +76,26 @@ export function verifyFindings(
     for (const { candidate, result } of judged) {
       usage = addUsage(usage, result.usage);
       model = result.model;
-      if (result.grounded) kept.push(candidate);
-      else dropped.push(candidate);
+      if (!result.grounded) {
+        dropped.push(candidate);
+        continue;
+      }
+      let finding = candidate;
+      // Drop a suggestion the verifier judged broken so a real finding never
+      // ships a no-op/incorrect fix (the prose fix in `message` survives).
+      if (result.suggestionValid === false && finding.suggestion !== undefined) {
+        finding = { ...finding, suggestion: undefined };
+      }
+      // Cap severity when the claimed impact could not be confirmed: keep the
+      // finding as a low-severity latent-footgun note instead of dropping it or
+      // publishing an overstated severity.
+      if (
+        result.impactConfirmed === false &&
+        SEVERITY_RANK[finding.severity] < SEVERITY_RANK[IMPACT_UNCONFIRMED_CEILING]
+      ) {
+        finding = { ...finding, severity: IMPACT_UNCONFIRMED_CEILING };
+      }
+      kept.push(finding);
     }
 
     return { kept, dropped, usage, model };

@@ -17,4 +17,10 @@ describe('buildSystemPrompt — coding standards in the cached prefix', () => {
   test('omits the section entirely when there are no standards (no empty heading)', () => {
     expect(buildSystemPrompt({})).not.toContain('## Project coding standards');
   });
+
+  test('instructs reachability-aware impact calibration and bans no-op suggestions', () => {
+    const out = buildSystemPrompt({});
+    expect(out).toMatch(/reachable/i);
+    expect(out).toMatch(/no-op/i);
+  });
 });

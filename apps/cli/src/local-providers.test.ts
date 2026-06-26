@@ -45,6 +45,26 @@ describe('coerceVerify', () => {
   test('defaults to kept when unparsable', () => {
     expect(coerceVerify('no json').grounded).toBe(true);
   });
+
+  test('parses suggestionValid when present', () => {
+    expect(coerceVerify('{"grounded": true, "reason": "ok", "suggestionValid": false}')).toEqual({
+      grounded: true,
+      reason: 'ok',
+      suggestionValid: false,
+    });
+  });
+
+  test('leaves suggestionValid undefined when absent or non-boolean', () => {
+    expect(coerceVerify('{"grounded": true, "reason": "ok"}').suggestionValid).toBeUndefined();
+    expect(
+      coerceVerify('{"grounded": true, "reason": "ok", "suggestionValid": "yes"}').suggestionValid
+    ).toBeUndefined();
+  });
+
+  test('parses impactConfirmed when present, undefined otherwise', () => {
+    expect(coerceVerify('{"grounded": true, "reason": "r", "impactConfirmed": false}').impactConfirmed).toBe(false);
+    expect(coerceVerify('{"grounded": true, "reason": "r"}').impactConfirmed).toBeUndefined();
+  });
 });
 
 describe('isLocalProvider', () => {

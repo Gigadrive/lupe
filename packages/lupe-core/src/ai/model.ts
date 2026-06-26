@@ -48,6 +48,22 @@ export interface VerifyInput {
 export interface VerifyResult {
   readonly grounded: boolean;
   readonly reason: string;
+  /**
+   * Whether the candidate's `suggestion` (when present) is a correct, complete
+   * fix. `false` keeps the finding but strips the suggestion — a real finding
+   * must never ship a no-op/incorrect fix. `undefined` = not assessed (no
+   * suggestion, or a backend that doesn't judge it); the suggestion is kept.
+   */
+  readonly suggestionValid?: boolean;
+  /**
+   * Whether the finding's claimed *impact/severity* is established by the
+   * context. `false` means the mechanism is real but the stated impact rests on
+   * a precondition the verifier cannot see (an off-context caller, an external
+   * contract, unproven attacker-controllability): the finding is kept but its
+   * severity is capped to `low` (a latent-footgun note) rather than dropped.
+   * `undefined` = not assessed; severity is untouched.
+   */
+  readonly impactConfirmed?: boolean;
   readonly usage: TokenUsage;
   readonly model: string;
 }
