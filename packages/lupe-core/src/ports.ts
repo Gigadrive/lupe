@@ -44,6 +44,16 @@ export interface PostReviewInput {
 }
 
 /**
+ * Represents a GitHub issue linked to or referenced by the PR under review.
+ */
+export interface LinkedIssue {
+  readonly number: number;
+  readonly title: string;
+  readonly state: 'open' | 'closed';
+  readonly body: string;
+}
+
+/**
  * GitHub transport. Implemented by @gigadrive/lupe-github. The engine depends
  * only on this interface, so the CLI (print mode) can omit it entirely.
  */
@@ -64,6 +74,12 @@ export interface GitHubClientService {
   readonly getLastReviewedSha: (pr: PullRequestRef) => Effect.Effect<string | undefined, GitHubError>;
   /** Post ALL findings as one review + upsert the sticky summary. */
   readonly postReview: (input: PostReviewInput) => Effect.Effect<void, GitHubError>;
+  /**
+   * Fetch GitHub Issues linked to the PR via keywords ("fixes #123", "closes #456")
+   * or mentioned in the PR description. Returns up to 20 recent issues.
+   * The review agent uses this to understand the "why" behind the changes.
+   */
+  readonly getRelatedIssues: (pr: PullRequestRef) => Effect.Effect<readonly LinkedIssue[], GitHubError>;
 }
 
 export class GitHubClient extends Context.Tag('@gigadrive/lupe-core/GitHubClient')<

@@ -9,6 +9,7 @@ import {
   type AnchoredComment,
   type DiffFile,
   type GitHubClientService,
+  type LinkedIssue,
   type PostReviewInput,
   type PullRequestRef,
 } from '@gigadrive/lupe-core';
@@ -223,7 +224,56 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
-  return { listDiff, listDiffSince, getLastReviewedSha, postReview };
+  const getRelatedIssues = (pr: PullRequestRef): Effect.Effect<readonly LinkedIssue[], GitHubError> =>
+    Effect.tryPromise({
+      try: async () => {
+        // Fetch the PR details to get the body.
+        const { data: prData } = await octokit.rest.pulls.get({
+          owner: pr.owner,
+          repo: pr.repo,
+          pull_number: pr.number,
+        });
+        const body = prData.body ?? '';
+
+        // Parse issue references from the PR body.
+        const issuePattern = /(?:fixes|closes|resolves|references|see(?:s| also)?)\s+#(\d+)/gi;
+        const matched = new Set<number>();
+        let m: RegExpExecArray | null;
+        while ((m = issuePattern.exec(body)) !== null) {
+          matched.add(Number.parseInt(m[1]!, 10));
+        }
+
+        if (matched.size === 0) return [];
+
+        // Fetch each issue in parallel (up to 20).
+        const nums = [...matched].slice(0, 20);
+        const results = await Promise.allSettled(
+          nums.map((num) =>
+            octokit.rest.issues.get({ owner: pr.owner, repo: pr.repo, issue_number: num }).then((r) => r.data)
+          )
+        );
+
+        const issues: LinkedIssue[] = [];
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const issue = result.value;
+            if (!issue.pull_request) {
+              // Only include actual issues, not PRs (GitHub issues API returns PRs too).
+              issues.push({
+                number: issue.number,
+                title: issue.title,
+                state: issue.state as 'open' | 'closed',
+                body: issue.body ?? '',
+              });
+            }
+          }
+        }
+        return issues;
+      },
+      catch: toGitHubError,
+    });
+
+  return { listDiff, listDiffSince, getLastReviewedSha, postReview, getRelatedIssues };
 }
 
 /** Effect Layer providing the GitHub transport for a token. */
