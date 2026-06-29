@@ -23,4 +23,10 @@ describe('buildSystemPrompt — coding standards in the cached prefix', () => {
     expect(out).toMatch(/reachable/i);
     expect(out).toMatch(/no-op/i);
   });
+
+  test('instructs that documentation-only findings stay low severity', () => {
+    const out = buildSystemPrompt({});
+    expect(out).toMatch(/documentation/i);
+    expect(out).toMatch(/never medium\+/i);
+  });
 });
