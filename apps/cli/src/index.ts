@@ -90,6 +90,9 @@ function runReviewFlow(flags: ReviewFlags) {
       }
       yield* Console.error(colors.gray(`Reviewing ${compressed.files.length} file(s) with ${provider}…`));
       const result = yield* runReview(compressed.files, target, {
+        // Local single-shot backends (claude-cli/codex-cli) have no repo tools;
+        // tell the prompt so it stays recall-biased instead of "confirm-or-stay-silent".
+        hasTools: !isLocalProvider(provider),
         profile: flags.profile ?? fileConfig.profile,
         codingStandards,
         pathInstructions: fileConfig.pathInstructions,

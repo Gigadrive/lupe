@@ -15,6 +15,10 @@ describe('file classification', () => {
     expect(isGenerated('packages/a/build/x.js')).toBe(true);
     expect(isGenerated('app.min.js')).toBe(true);
     expect(isGenerated('src/index.ts')).toBe(false);
+    // ORM-generated migration metadata is noise; the .sql migration itself is not.
+    expect(isGenerated('packages/common/drizzle/meta/0027_snapshot.json')).toBe(true);
+    expect(isGenerated('packages/common/drizzle/meta/_journal.json')).toBe(true);
+    expect(isGenerated('packages/common/drizzle/0027_tiny_chat.sql')).toBe(false);
   });
 
   test('matchesFilters honours include/exclude with last-match-wins', () => {

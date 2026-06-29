@@ -30,3 +30,21 @@ describe('buildSystemPrompt — coding standards in the cached prefix', () => {
     expect(out).toMatch(/never medium\+/i);
   });
 });
+
+describe('buildSystemPrompt — tool-awareness (hasTools)', () => {
+  test('default (API path) keeps the tool-based confirm-before-reporting guidance', () => {
+    const out = buildSystemPrompt({});
+    expect(out).toContain('Use the read-only tools');
+    expect(out).not.toContain('you have NO tools');
+  });
+
+  test('hasTools:false (local single-shot backend) switches to a no-tools, recall-biased variant', () => {
+    const out = buildSystemPrompt({ hasTools: false });
+    expect(out).toContain('you have NO tools');
+    expect(out).toMatch(/do not stay silent/i);
+    expect(out).not.toContain('Use the read-only tools');
+    // It must not tell a tool-less model to downgrade/withhold when it cannot trace a precondition.
+    expect(out).not.toMatch(/trace the live caller/i);
+    expect(out).toMatch(/do NOT suppress/i);
+  });
+});

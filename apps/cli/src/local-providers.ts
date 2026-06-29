@@ -166,6 +166,29 @@ function* stringLeaves(value: unknown): Generator<string> {
   else if (value && typeof value === 'object') for (const v of Object.values(value)) yield* stringLeaves(v);
 }
 
+/**
+ * Diverse focus lenses for the `deep` (`--thorough`) task. A single-shot model
+ * surfaces only the most salient issue per call, so thorough mode runs one pass
+ * per lens and unions the results — the same multi-lens technique a human audit
+ * uses to get coverage. Recall-boosting; the verifier + filter chain still gate.
+ */
+const DEEP_LENSES: readonly string[] = [
+  'FOCUS PASS — SECURITY, AUTHORIZATION & PRIVACY: authn/authz gaps (in Next.js every server action and route handler must INDEPENDENTLY authenticate and authorize — a page/layout guard does not protect them), IDOR, exposing secrets/tokens/credentials to the client, injection, SSRF, path traversal, and trusting client-supplied values the server should decide.',
+  'FOCUS PASS — CORRECTNESS, EDGE CASES & ERROR HANDLING: logic and off-by-one errors, wrong conditionals/predicates, null/undefined/NaN and divide-by-zero, unhandled rejections, swallowed errors, race conditions, and incorrect state transitions.',
+  'FOCUS PASS — PERFORMANCE, RESOURCE & DATA INTEGRITY: N+1 and unbounded queries (missing LIMIT), quadratic work, leaks, missing-index scans on hot paths, and data corruption from denormalization mismatches or lost/duplicated writes.',
+];
+
+/** Collapse findings sharing an anchor (union of multi-pass results), keeping the most confident. */
+export function dedupeLocalFindings(findings: readonly Finding[]): Finding[] {
+  const byKey = new Map<string, Finding>();
+  for (const f of findings) {
+    const key = `${f.path}:${f.startLine}:${f.endLine}`;
+    const existing = byKey.get(key);
+    if (!existing || f.confidence > existing.confidence) byKey.set(key, f);
+  }
+  return [...byKey.values()];
+}
+
 function makeLocalModel(backend: Backend): AiModelService {
   const fail = (error: unknown): AiError =>
     new ProviderError({
@@ -173,19 +196,30 @@ function makeLocalModel(backend: Backend): AiModelService {
       provider: backend.label,
     });
 
+  const schemaJson = JSON.stringify(findingsJsonSchema());
+  const runGenerationPass = async (input: GenerateFindingsInput, lens?: string): Promise<Finding[]> => {
+    const focus = lens ? `\n\n${lens}\nList EVERY issue you find for this focus; aim for completeness.` : '';
+    const prompt =
+      `${input.system}\n\n${input.prompt}${focus}\n\n` +
+      `Return ONLY a JSON array of findings matching this JSON Schema. No markdown, no commentary:\n${schemaJson}`;
+    const stdout = await runCommand(backend.command, backend.args, prompt);
+    return coerceFindings(backend.extractText(stdout));
+  };
+
   const generateFindings = (input: GenerateFindingsInput): Effect.Effect<GenerateFindingsResult, AiError> =>
     Effect.tryPromise({
       try: async () => {
-        const prompt =
-          `${input.system}\n\n${input.prompt}\n\n` +
-          `Return ONLY a JSON array of findings matching this JSON Schema. No markdown, no commentary:\n` +
-          `${JSON.stringify(findingsJsonSchema())}`;
-        const stdout = await runCommand(backend.command, backend.args, prompt);
+        // `deep` (--thorough) fans out one pass per focus lens and unions them
+        // (single-shot recall booster); plain review is a single pass.
+        const deep = input.task === 'deep';
+        const passes = deep
+          ? await Promise.all(DEEP_LENSES.map((lens) => runGenerationPass(input, lens)))
+          : [await runGenerationPass(input)];
         return {
-          findings: coerceFindings(backend.extractText(stdout)),
+          findings: dedupeLocalFindings(passes.flat()),
           usage: EMPTY_USAGE,
           model: backend.label,
-          steps: 1,
+          steps: deep ? DEEP_LENSES.length : 1,
         };
       },
       catch: fail,

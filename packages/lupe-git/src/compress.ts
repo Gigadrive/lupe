@@ -28,6 +28,9 @@ const GENERATED_PATTERNS: readonly RegExp[] = [
   /(^|\/)gen\//,
   /\.generated\./,
   /(^|\/)__snapshots__\//,
+  // ORM-generated migration metadata/snapshots (the actual `.sql` migrations stay reviewable).
+  /(^|\/)drizzle\/meta\//,
+  /(^|\/)migrations\/meta\//,
 ];
 
 const LOCKFILES: ReadonlySet<string> = new Set([

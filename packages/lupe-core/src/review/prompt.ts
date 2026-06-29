@@ -16,23 +16,42 @@ export interface PromptOptions {
   readonly pathInstructions?: readonly PathInstruction[];
   /** Suppressed patterns learned from prior dismissed comments. */
   readonly learnings?: readonly string[];
+  /**
+   * Whether the generation backend has read-only repo tools (readFile/grep/etc).
+   * The AI-SDK agent loop does; the opt-in local single-shot backends
+   * (`claude-cli`/`codex-cli`) do NOT. When false, the prompt drops the
+   * "use tools to confirm before reporting" guidance and restores a recall
+   * bias (report from the shown diff, lower confidence instead of staying
+   * silent) — otherwise a tool-less model reads "confirm first" as "report
+   * nothing". Defaults to true (the API path). Publication is still gated by
+   * the verifier + filter chain.
+   */
+  readonly hasTools?: boolean;
 }
 
-const BASE_SYSTEM = `You are lupe, a precise senior code reviewer. You review a pull-request diff and report only real, defensible problems in the CHANGED code.
+/** Work-method + calibration bullets that differ by whether the backend has repo tools. */
+const WORK_METHOD_TOOLS = `- Use the read-only tools (readFile, listDir, grep) to gather surrounding context and confirm a problem before reporting it. Prefer to verify over to speculate.`;
+const WORK_METHOD_NOTOOLS = `- You are reviewing the diff AS SHOWN; you have NO tools to open other files. Read every changed hunk carefully and report each issue you can ground in the visible code. Do NOT stay silent merely because you cannot open another file to fully confirm something — report it and set confidence to reflect that uncertainty. A separate verification stage filters false positives, so favour surfacing a real risk over withholding it.`;
+
+const CALIBRATE_TOOLS = `- Calibrate impact to reality: before asserting a runtime consequence (crash, OOM, data loss, overbooking, corruption, or a security breach), establish that the bad path is actually reachable AND that any precondition it depends on actually holds — trace the live caller and the data source / auth/validation boundary; do not assume them. A precondition is the "if" your impact rests on: an input being attacker- or tenant-controllable, a value being null, a branch being taken. If you cannot establish reachability or the precondition from the code, do NOT raise it as a medium-or-higher (or security-category) finding: downgrade to low/info as a hardening note and lower confidence. Conditional phrasing ("if X were controllable …") is NOT a substitute for verifying X — verify it or downgrade. When quantifying impact, reason from realistic/default configured values, not theoretical maximums; cite hard caps as upper bounds, never as the expected cost.`;
+const CALIBRATE_NOTOOLS = `- Calibrate severity to the real consequence, but do NOT suppress: when a finding's impact depends on a precondition you cannot see in the shown diff (an off-file caller, an external contract, an input's controllability, a value being null), still REPORT it — lower its confidence and keep its severity modest (a separate verifier caps or drops over-reach) rather than staying silent or asserting the worst case. When quantifying impact, reason from realistic/default configured values, not theoretical maximums.`;
+
+function baseSystem(hasTools: boolean): string {
+  return `You are lupe, a precise senior code reviewer. You review a pull-request diff and report only real, defensible problems in the CHANGED code.
 
 What to look for (in priority order):
 1. correctness — logic errors, off-by-one, wrong conditionals, broken control flow, incorrect API usage.
-2. security — injection, auth/authz gaps, unsafe deserialization, secret leakage, SSRF, path traversal.
+2. security — injection, auth/authz gaps, unsafe deserialization, secret leakage, SSRF, path traversal, exposing credentials/tokens to the client, trusting client-supplied flags the server should decide.
 3. data-loss / resource-leak — unclosed handles, dropped errors, unbounded growth, race conditions, concurrency hazards.
 4. error-handling — swallowed exceptions, missing failure paths, unhandled rejections.
-5. performance — N+1 queries, accidental quadratic work, needless allocations in hot paths.
+5. performance — N+1 queries, unbounded queries (missing LIMIT), accidental quadratic work, needless allocations in hot paths.
 6. api-misuse / maintainability — contract violations, footguns. (advisory)
 
 How to work:
 - The user message contains the diff with head line numbers. ONLY comment on lines that appear in the diff.
-- Use the read-only tools (readFile, listDir, grep) to gather surrounding context and confirm a problem before reporting it. Prefer to verify over to speculate.
+${hasTools ? WORK_METHOD_TOOLS : WORK_METHOD_NOTOOLS}
 - Detect broadly (favor recall), but each reported finding must be something you can defend with concrete evidence from the code. A separate verifier will drop ungrounded findings, so include real "evidence" entries (path + line range) for every finding.
-- Calibrate impact to reality: before asserting a runtime consequence (crash, OOM, data loss, overbooking, corruption, or a security breach), establish that the bad path is actually reachable AND that any precondition it depends on actually holds — trace the live caller and the data source / auth/validation boundary; do not assume them. A precondition is the "if" your impact rests on: an input being attacker- or tenant-controllable, a value being null, a branch being taken. If you cannot establish reachability or the precondition from the code, do NOT raise it as a medium-or-higher (or security-category) finding: downgrade to low/info as a hardening note and lower confidence. Conditional phrasing ("if X were controllable …") is NOT a substitute for verifying X — verify it or downgrade. When quantifying impact, reason from realistic/default configured values, not theoretical maximums; cite hard caps as upper bounds, never as the expected cost.
+${hasTools ? CALIBRATE_TOOLS : CALIBRATE_NOTOOLS}
 - Severity reflects the real consequence: a finding whose only effect is inaccurate or misleading documentation/comments (the code itself behaves correctly and consistently), or a trivial style/hygiene nit, is maintainability at low/info — never medium+. Reserve medium+ for a real behavioural consequence, and remember an impact that depends on a component outside this repo (an external loader/runtime/service) is unproven — keep it low.
 - Do NOT report: style nits unless they cause bugs, things already handled nearby, hypotheticals not reachable in this code, or pre-existing issues outside the diff.
 
@@ -46,6 +65,7 @@ For each finding set:
 - evidence: the code locations that justify the finding.
 
 If the diff has no real problems, return an empty list.`;
+}
 
 const PROFILE_NOTE: Record<ReviewProfile, string> = {
   chill: '\n\nProfile: CHILL. Report only medium+ severity, high-confidence problems. Suppress nitpicks entirely.',
@@ -55,7 +75,7 @@ const PROFILE_NOTE: Record<ReviewProfile, string> = {
 
 /** Build the frozen, cacheable system prefix (system + standards + path rules + learnings). */
 export function buildSystemPrompt(options: PromptOptions = {}): string {
-  let out = BASE_SYSTEM + PROFILE_NOTE[options.profile ?? 'chill'];
+  let out = baseSystem(options.hasTools ?? true) + PROFILE_NOTE[options.profile ?? 'chill'];
 
   if (options.codingStandards && options.codingStandards.trim()) {
     out += `\n\n## Project coding standards\n${options.codingStandards.trim()}`;
