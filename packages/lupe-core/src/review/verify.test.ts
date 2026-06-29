@@ -125,3 +125,25 @@ describe('verifyFindings — impact-confirmation severity cap', () => {
     expect(out.kept.find((f) => f.title === 'unassessed')!.severity).toBe('medium');
   });
 });
+
+describe('verifyFindings — cross-file evidence context', () => {
+  test('includes the diff of files the finding cites in evidence, not just the flagged file', async () => {
+    const contexts: string[] = [];
+    const capturing = Layer.succeed(AiModel, {
+      generateFindings: () => Effect.succeed({ findings: [], usage: EMPTY_USAGE, model: 'fake', steps: 0 }),
+      verify: ({ evidenceContext }) => {
+        contexts.push(evidenceContext);
+        return Effect.succeed({ grounded: true, reason: '', usage: EMPTY_USAGE, model: 'fake-verify' });
+      },
+    } satisfies AiModelService);
+    const candidate = finding({ path: 'a.ts', evidence: [{ path: 'b.ts', startLine: 1, endLine: 1 }] });
+    const files: readonly DiffFile[] = [
+      { path: 'a.ts', status: 'modified', binary: false, additions: 1, deletions: 0, hunks: [] },
+      { path: 'b.ts', status: 'modified', binary: false, additions: 1, deletions: 0, hunks: [] },
+    ];
+    await Effect.runPromise(verifyFindings([candidate], files).pipe(Effect.provide(capturing)));
+    // Both the flagged file and the evidence-referenced producer's diff are present.
+    expect(contexts[0]).toContain('### a.ts [modified]');
+    expect(contexts[0]).toContain('### b.ts [modified]');
+  });
+});

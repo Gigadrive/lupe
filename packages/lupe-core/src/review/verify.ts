@@ -13,7 +13,7 @@ const VERIFY_SYSTEM = `You are lupe's grounding verifier. You receive a single c
 
 Judge these independently:
 - grounded: set false when the finding is speculative, not actually reachable (e.g. the flagged code has no live caller, or is dead/test-only so its claimed runtime impact cannot occur), already handled by nearby code, based on code that isn't shown, a pure style preference, or otherwise not clearly supported by the context. A finding may be grounded because its *mechanism* is real and visible even if its broader impact is not yet proven (see impactConfirmed). Be skeptical — when in doubt, reject. Keep grounded=true only when the underlying problem is real and visible in the provided code.
-- impactConfirmed: judge whether the finding's claimed *impact and severity* are actually established. Set false when the mechanism is real but the stated consequence (crash, OOM, data loss, overbooking, security breach) rests on a precondition you cannot see in the context or cited evidence — an off-context caller that triggers the path, an external contract assumed to behave a certain way, or unproven attacker-/tenant-controllability of an input. A finding with impactConfirmed=false is KEPT but capped to a low-severity latent-footgun note, not dropped. Set true when the impact is established by the context; omit when there is no elevated impact claim to judge. (A precondition asserted but not shown is speculation, however plausible.)
+- impactConfirmed: judge whether the finding's claimed *impact and severity* are actually established. Set false when the mechanism is real but the stated consequence (crash, OOM, data loss, overbooking, security breach, malformed output) rests on a precondition you cannot see in the context or cited evidence — an off-context caller that triggers the path, an external contract assumed to behave a certain way, unproven attacker-/tenant-controllability of an input, or a triggering input arriving in the problematic form. In particular, when a finding faults a function for mishandling some input/value but the caller or producer that would actually supply that input in the bad form is NOT shown, set impactConfirmed=false (the producer may already sanitise it). A finding with impactConfirmed=false is KEPT but capped to a low-severity latent-footgun note, not dropped. Set true when the impact is established by the context; omit when there is no elevated impact claim to judge. (A precondition asserted but not shown is speculation, however plausible.)
 - suggestionValid: only when the finding includes a proposed suggestion, set false if that fix is incorrect, incomplete, a no-op, or would not actually resolve the problem (e.g. an expression that always evaluates to the same value, or code that does not compile/parse). A grounded finding with a bad suggestion stays grounded=true — only its broken fix is dropped. Omit the field when there is no suggestion to judge.`;
 
 export interface VerifyOptions {
@@ -28,9 +28,26 @@ export interface VerifyOutcome {
   readonly model?: string;
 }
 
-function buildEvidenceContext(finding: Finding, file: DiffFile | undefined): string {
+/** Max distinct file diffs to include in a single verifier context (a prompt-size bound). */
+const MAX_EVIDENCE_FILES = 6;
+
+function buildEvidenceContext(finding: Finding, byPath: ReadonlyMap<string, DiffFile>): string {
   const parts: string[] = [];
-  if (file) parts.push(serialiseFileDiff(file));
+  const seen = new Set<string>();
+  const pushFile = (path: string): void => {
+    if (seen.has(path) || seen.size >= MAX_EVIDENCE_FILES) return;
+    const file = byPath.get(path);
+    if (file) {
+      parts.push(serialiseFileDiff(file));
+      seen.add(path);
+    }
+  };
+  // The flagged file first, then any *other* files the finding cites as evidence,
+  // so the verifier can check cross-file claims (a producer that already
+  // sanitises an input, a caller that guards a path) instead of judging the
+  // flagged file in isolation — the main source of in-isolation false positives.
+  pushFile(finding.path);
+  for (const e of finding.evidence) pushFile(e.path);
   if (finding.evidence.length > 0) {
     parts.push(
       'Cited evidence:\n' +
@@ -63,7 +80,7 @@ export function verifyFindings(
             task: 'verify',
             system: VERIFY_SYSTEM,
             candidate,
-            evidenceContext: buildEvidenceContext(candidate, byPath.get(candidate.path)),
+            evidenceContext: buildEvidenceContext(candidate, byPath),
           })
           .pipe(Effect.map((result) => ({ candidate, result }))),
       { concurrency: options.concurrency ?? 4 }
