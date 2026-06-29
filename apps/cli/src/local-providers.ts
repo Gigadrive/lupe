@@ -209,17 +209,30 @@ function makeLocalModel(backend: Backend): AiModelService {
   const generateFindings = (input: GenerateFindingsInput): Effect.Effect<GenerateFindingsResult, AiError> =>
     Effect.tryPromise({
       try: async () => {
-        // `deep` (--thorough) fans out one pass per focus lens and unions them
-        // (single-shot recall booster); plain review is a single pass.
-        const deep = input.task === 'deep';
-        const passes = deep
-          ? await Promise.all(DEEP_LENSES.map((lens) => runGenerationPass(input, lens)))
-          : [await runGenerationPass(input)];
+        // `deep` (--thorough) runs one pass per focus lens and unions them (a
+        // single-shot recall booster); plain review is a single pass. Passes run
+        // SEQUENTIALLY so thorough mode does not multiply the concurrent
+        // subprocess load — the pipeline already fans chunks out concurrently, so
+        // parallel lenses here would 3x the in-flight `claude -p` calls and rate-
+        // limit on a large PR. A single failed pass is tolerated, not fatal.
+        const lenses = input.task === 'deep' ? DEEP_LENSES : [undefined];
+        const findings: Finding[] = [];
+        const errors: unknown[] = [];
+        for (const lens of lenses) {
+          try {
+            findings.push(...(await runGenerationPass(input, lens)));
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        // Fail the chunk only when every pass errored — a transient single-pass
+        // failure must not sink the whole review.
+        if (errors.length === lenses.length && errors.length > 0) throw errors[0];
         return {
-          findings: dedupeLocalFindings(passes.flat()),
+          findings: dedupeLocalFindings(findings),
           usage: EMPTY_USAGE,
           model: backend.label,
-          steps: deep ? DEEP_LENSES.length : 1,
+          steps: Math.max(1, lenses.length - errors.length),
         };
       },
       catch: fail,
