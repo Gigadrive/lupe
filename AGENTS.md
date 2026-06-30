@@ -48,7 +48,7 @@ Follow these rules to avoid breaking the monorepo, use the right tools, and prod
 - **pnpm only.** Never generate npm/yarn lockfiles. Use `pnpm dlx` for one-off CLIs.
 - **Respect the AI-SDK-vs-Effect seam** (top of this file). Do not call the AI SDK from outside `lupe-core/src/ai/`. Do not import Octokit outside `lupe-github`. Do not spawn processes outside the CLI's `local-providers.ts`.
 - **`Finding` (Zod 4, `lupe-core/src/finding.ts`) is the single source of truth** for findings + tool/output schemas. Don't define parallel finding shapes. Effect Schema stays on the config/domain side, never at the AI boundary.
-- **Rebuild the Action bundle when its source/deps change.** `apps/action/dist` is committed and verified in CI. Run `pnpm turbo run build --filter=@gigadrive/lupe-action` and commit `dist`, or the `action-dist` CI job fails.
+- **Never commit the Action bundle.** `apps/action/dist` is gitignored and **not** committed to `main`. The ncc bundle is built and tagged only at release time: when Changesets bumps `@gigadrive/lupe-action`, `release.yml` builds the bundle and pushes it to the consumed tags (immutable `vX.Y.Z` + moving `vN` alias). Locally, `pnpm turbo run build --filter=@gigadrive/lupe-action` produces `dist` as ordinary ignored output.
 - **Use `pnpm` task names, not raw tools**, so Turbo ordering/caching applies.
 
 ## Commands agents should run (pnpm only)
@@ -65,7 +65,7 @@ pnpm knip                          # unused deps / exports / files
 pnpm effect:check                  # @effect/language-service diagnostics
 
 pnpm --filter @gigadrive/lupe-core test          # one package
-pnpm turbo run build --filter=@gigadrive/lupe-action   # rebuild + (re)commit the Action bundle
+pnpm turbo run build --filter=@gigadrive/lupe-action   # build the Action bundle (ignored output; tagged at release)
 
 node apps/cli/dist/index.mjs review -C <repo> --print   # run the CLI (bin not globally linked)
 ANTHROPIC_API_KEY=… node apps/cli/dist/index.mjs check
@@ -95,7 +95,7 @@ Before declaring work done, run the CI equivalents locally: `pnpm format && pnpm
 - **Do** keep `lupe-core` free of Octokit and `node:child_process`.
 - **Do** add a new provider in `lupe-core/src/ai/provider.ts` (one `case` in `buildProvider`) + a pricing row in `pricing.ts`.
 - **Do** add tests next to the code (`*.test.ts`); offline by default. Network/model tests must be gated (`test.skipIf(!process.env.ANTHROPIC_API_KEY)`).
-- **Don't** introduce Prettier/ESLint, add `^`-ranged runtime deps, or commit a stale `apps/action/dist`.
+- **Don't** introduce Prettier/ESLint, add `^`-ranged runtime deps, or commit `apps/action/dist` (it's gitignored; the bundle is built + tagged at release).
 - **Don't** import a workspace package's internals — use its public `exports`.
 - **Don't** bypass the grounding verifier / filter chain when adding findings; bias generation for recall and let the pipeline gate publication.
 

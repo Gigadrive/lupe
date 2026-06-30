@@ -33,6 +33,11 @@ The only required secret is your **provider key** (e.g. `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `AI_GATEWAY_API_KEY`). GitHub
 access uses the built-in `GITHUB_TOKEN`.
 
+> **Versioning.** The `@vN` ref points at a release tag whose tree contains the
+> built bundle — the bundle is built and tagged by the release workflow, not
+> committed to `main`. Pin to a moving major (`@v1`) or an immutable
+> `@vX.Y.Z`. While the action is pre-1.0 the major alias is `@v0`.
+
 ## Inputs
 
 | Input              | Default               | Description                                                                          |

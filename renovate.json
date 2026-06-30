@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "The @gigadrive/lupe-action ncc bundle is gitignored and built/tagged at release time (release.yml), not committed — so dep bumps need no post-upgrade rebuild.",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "timezone": "UTC",
   "schedule": ["after 02:00 and before 06:00 every weekday"],

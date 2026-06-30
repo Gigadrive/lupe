@@ -38,15 +38,3 @@ jobs:
         run: pnpm turbo run build typecheck test check:exports
       - name: Effect language-service check
         run: pnpm effect:check
-
-  action-dist:
-    name: Action bundle is fresh
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: ./.github/actions/setup-node-pnpm
-      # Build via turbo so the workspace deps (^build) are built before the ncc bundle.
-      - run: pnpm turbo run build --filter=@gigadrive/lupe-action
-      - name: Verify dist is up to date
-        run: git diff --exit-code -- apps/action/dist || (echo "::error::apps/action/dist is stale — run 'pnpm turbo run build --filter=@gigadrive/lupe-action' and commit." && exit 1)

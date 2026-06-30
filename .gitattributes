@@ -1,7 +1,5 @@
-# Normalise all text to LF in the repo and on checkout, so the committed
-# Action bundle (apps/action/dist) never drifts due to line-ending differences.
+# Normalise all text to LF in the repo and on checkout.
 * text=auto eol=lf
 
-# Generated bundle — keep it out of diffs and language stats.
-apps/action/dist/** linguist-generated=true
+# Generated lockfile — keep it out of diffs and language stats.
 pnpm-lock.yaml linguist-generated=true

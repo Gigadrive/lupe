@@ -7,5 +7,6 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@repo/typescript-config", "@repo/eval", "@gigadrive/lupe-action"]
+  "updateInternalDependents": "always",
+  "ignore": ["@repo/typescript-config", "@repo/eval"]
 }

@@ -1,8 +1,5 @@
 node_modules/
 dist/
-# The Action is consumed via git ref, so its bundled output must be committed.
-!apps/action/dist/
-!apps/action/dist/**
 .turbo/
 coverage/
 *.tsbuildinfo
