@@ -1,6 +1,6 @@
 {
   "name": "@gigadrive/lupe-github",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "GitHub transport for lupe: paginated diff fetch, batched review posting, sticky summary, and thread resolution.",
   "license": "MIT",
   "files": [

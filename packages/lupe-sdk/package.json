@@ -1,6 +1,6 @@
 {
   "name": "@gigadrive/lupe-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Embeddable, Promise-returning programmatic facade for the lupe AI code reviewer.",
   "license": "MIT",
   "files": [
