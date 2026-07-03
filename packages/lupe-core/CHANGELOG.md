@@ -1,5 +1,11 @@
 # @gigadrive/lupe-core
 
+## 0.2.1
+
+### Patch Changes
+
+- a33c5a8: First CI release via npm trusted publishing (OIDC) — establishes provenance attestations on the published packages. No functional changes.
+
 ## 0.2.0
 
 ### Minor Changes

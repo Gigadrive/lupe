@@ -1,6 +1,6 @@
 {
   "name": "@gigadrive/lupe",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "lupe — platform- and provider-agnostic AI code review agent. BYO tokens or local Claude Code / Codex credentials.",
   "license": "MIT",
   "repository": {
