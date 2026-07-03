@@ -27,7 +27,7 @@
     "oxlint": "1.71.0",
     "publint": "0.3.21",
     "tsdown": "0.22.3",
-    "turbo": "2.10.0",
+    "turbo": "2.10.1",
     "typescript": "6.0.3",
     "vitest": "4.1.9"
   },
