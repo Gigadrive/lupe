@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "Embeddable, Promise-returning programmatic facade for the lupe AI code reviewer.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gigadrive/lupe.git",
+    "directory": "packages/lupe-sdk"
+  },
   "files": [
     "dist"
   ],

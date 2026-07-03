@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "Diff parsing, hunk → (line, side) anchoring, read-only repo tools, and Qodo-style context compression for lupe.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gigadrive/lupe.git",
+    "directory": "packages/lupe-git"
+  },
   "files": [
     "dist"
   ],
