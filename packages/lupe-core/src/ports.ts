@@ -3,6 +3,7 @@ import type { Effect } from 'effect';
 
 import type { DiffFile, Anchor } from './diff';
 import type { DiffParseError, GitHubError } from './errors';
+import type { LupeReviewState } from './render/markdown';
 import type { PullRequestRef, ReviewTarget } from './review';
 
 /**
@@ -41,6 +42,11 @@ export interface PostReviewInput {
   readonly summaryBody: string;
   /** Resolve inline threads from prior runs that no longer apply. */
   readonly resolveStaleThreads: boolean;
+  /**
+   * Files reviewed in this run. When set, stale-thread resolution is scoped to
+   * threads on these paths, so findings on files not touched this run survive.
+   */
+  readonly reviewedPaths?: readonly string[];
 }
 
 /**
@@ -72,6 +78,8 @@ export interface GitHubClientService {
   ) => Effect.Effect<readonly DiffFile[], GitHubError>;
   /** Last SHA lupe reviewed, read from the sticky summary marker (incremental review). */
   readonly getLastReviewedSha: (pr: PullRequestRef) => Effect.Effect<string | undefined, GitHubError>;
+  /** Full persisted review state from the sticky summary (findings + posted keys), if any. */
+  readonly getReviewState: (pr: PullRequestRef) => Effect.Effect<LupeReviewState | undefined, GitHubError>;
   /** Post ALL findings as one review + upsert the sticky summary. */
   readonly postReview: (input: PostReviewInput) => Effect.Effect<void, GitHubError>;
   /**

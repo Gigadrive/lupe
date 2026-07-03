@@ -1,8 +1,20 @@
 import { describe, expect, test } from 'vitest';
 
 import type { AnchoredComment } from '@gigadrive/lupe-core';
+import { INLINE_MARKER, renderInlineComment, type Finding } from '@gigadrive/lupe-core';
 
-import { compareToDiffFiles, toReviewComment } from './client';
+import {
+  compareToDiffFiles,
+  paginateCompare,
+  shouldResolveThread,
+  toReviewComment,
+  type CompareResult,
+} from './client';
+
+function page(n: number, status = 'ahead'): CompareResult {
+  // n files, each named f{i}.ts
+  return { status, files: Array.from({ length: n }, (_, i) => ({ filename: `f${i}.ts`, status: 'modified' })) };
+}
 
 describe('toReviewComment', () => {
   test('maps a single-line anchor to line+side (no start_line)', () => {
@@ -55,5 +67,72 @@ describe('compareToDiffFiles (incremental review)', () => {
 
   test('throws when files are absent', () => {
     expect(() => compareToDiffFiles({ status: 'ahead' })).toThrow(/not fast-forward/);
+  });
+});
+
+describe('paginateCompare (incremental compare pagination)', () => {
+  test('stops on the first short page (single page under the limit)', async () => {
+    const fetched: number[] = [];
+    const data = await paginateCompare((p) => {
+      fetched.push(p);
+      return Promise.resolve(page(42));
+    });
+    expect(fetched).toEqual([1]);
+    expect(data.files).toHaveLength(42);
+    expect(data.status).toBe('ahead');
+  });
+
+  test('concatenates a full page + a short page and preserves page-1 status', async () => {
+    const pages: Record<number, CompareResult> = { 1: page(100), 2: page(30) };
+    const fetched: number[] = [];
+    const data = await paginateCompare((p) => {
+      fetched.push(p);
+      return Promise.resolve(pages[p]!);
+    });
+    expect(fetched).toEqual([1, 2]);
+    expect(data.files).toHaveLength(130);
+  });
+
+  test('throws when the 3rd page is still full (>300 files) so the caller falls back to the full diff', async () => {
+    await expect(paginateCompare(() => Promise.resolve(page(100)))).rejects.toThrow(/300-file/);
+  });
+});
+
+describe('shouldResolveThread (scoped resolution)', () => {
+  function inlineBody(path: string): string {
+    const f: Finding = {
+      ruleId: 'lupe/correctness/x',
+      title: 't',
+      path,
+      startLine: 1,
+      endLine: 1,
+      side: 'RIGHT',
+      severity: 'high',
+      category: 'correctness',
+      message: 'm',
+      confidence: 0.9,
+      evidence: [],
+    };
+    return renderInlineComment(f);
+  }
+
+  test('ignores non-lupe threads', () => {
+    expect(shouldResolveThread('just a human comment')).toBe(false);
+    expect(shouldResolveThread('just a human comment', new Set(['a.ts']))).toBe(false);
+  });
+
+  test('resolves all lupe threads when no scope is given (full-diff run)', () => {
+    expect(shouldResolveThread(inlineBody('a.ts'))).toBe(true);
+  });
+
+  test('with a scope, resolves only threads on reviewed files', () => {
+    const reviewed = new Set(['a.ts']);
+    expect(shouldResolveThread(inlineBody('a.ts'), reviewed)).toBe(true);
+    expect(shouldResolveThread(inlineBody('untouched.ts'), reviewed)).toBe(false);
+  });
+
+  test('resolves lupe threads with no path marker (older comments) under a scope', () => {
+    const legacy = `some finding text\n<sub>${INLINE_MARKER} · \`lupe/x/y\` · confidence 90%</sub>`;
+    expect(shouldResolveThread(legacy, new Set(['a.ts']))).toBe(true);
   });
 });

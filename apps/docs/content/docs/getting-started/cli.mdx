@@ -1,0 +1,139 @@
+---
+title: CLI quickstart
+description: Review a local branch or working-tree diff from your terminal with the lupe CLI.
+---
+
+The lupe CLI (`@gigadrive/lupe`, bin name `lupe`) reviews changes on your machine and prints the findings to your terminal. It reads the same review engine used by the GitHub Action, so you can catch issues before you ever open a pull request.
+
+<Callout type="info">The CLI is print-only. It never posts to GitHub — publishing findings as PR comments is done through the [GitHub Action](/docs/reference/cli) or the SDK. Locally, `lupe` writes results to stdout.</Callout>
+
+## Running the CLI
+
+Once lupe is installed as a package, you invoke it as `lupe`:
+
+```bash
+lupe review --print
+```
+
+In this monorepo the `lupe` bin is not globally linked, so during local development you run the built entry point with Node instead:
+
+```bash
+node apps/cli/dist/index.mjs review --print
+```
+
+The examples below use the `lupe` form. Substitute `node apps/cli/dist/index.mjs` if you are working inside the repo.
+
+## 1. Set your provider key
+
+lupe is bring-your-own-token: you point it at your own model provider and supply the key through an environment variable. For Anthropic:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Each provider reads its own conventional variable:
+
+| Provider              | Environment variable             |
+| --------------------- | -------------------------------- |
+| `anthropic`           | `ANTHROPIC_API_KEY`              |
+| `openai`              | `OPENAI_API_KEY`                 |
+| `openai-compatible`   | `OPENAI_API_KEY`                 |
+| `google`              | `GOOGLE_GENERATIVE_AI_API_KEY`   |
+| `gateway`             | `AI_GATEWAY_API_KEY`             |
+| `bedrock`             | `AWS_ACCESS_KEY_ID`              |
+| `claude-cli`          | none — uses your local login     |
+| `codex-cli`           | none — uses your local login     |
+
+The `claude-cli` and `codex-cli` backends are opt-in and reuse your existing local Claude Code / Codex login instead of a key. See [providers and models](/docs/guides/providers-and-models) for the full list.
+
+## 2. `lupe check` — validate config and credentials
+
+Before your first review, confirm that lupe can see your config and credentials:
+
+```bash
+lupe check
+```
+
+It reports the resolved provider, the active profile (defaults to `chill`), your `models` mapping if you set one, and whether the provider's key variable is `set` or `missing`. If the key is missing for a provider that needs one, it warns you to set it before running a review; otherwise it prints `✓ ready`. For a local backend it reminds you that it uses your local login and to make sure you are logged in.
+
+You can point `check` at another repository or override the provider:
+
+```bash
+lupe check -C ../other-repo --provider openai
+```
+
+## 3. `lupe init` — scaffold a config
+
+`lupe init` interactively creates a `.lupe.yaml` in the target directory. It asks which provider you will use and which review profile you want (`chill` or `assertive`), then writes a starter config with sensible path filters and a findings cap, and reminds you which key variable to export.
+
+```bash
+lupe init
+```
+
+See [configuration](/docs/guides/configuration) for every key you can add to `.lupe.yaml`.
+
+## 4. `lupe review` — review a diff
+
+By default, `lupe review` reviews your working-tree changes and prints the findings:
+
+```bash
+lupe review --print
+```
+
+Use `-C` (alias for `--cwd`) to review a repository other than the current directory:
+
+```bash
+lupe review -C ../other-repo --print
+```
+
+### Review a specific range
+
+Pass `--base` and `--head` to review the diff between two refs instead of the working tree:
+
+```bash
+lupe review --base main --head HEAD --print
+```
+
+`--base` is the ref to diff against; `--head` defaults to `HEAD`.
+
+### Choose the output format
+
+`--format` selects how findings are rendered. The default is `md` (human-readable markdown); `sarif` and `json` are machine-readable:
+
+```bash
+lupe review --format sarif --print
+```
+
+```bash
+lupe review --format json --print
+```
+
+### Other useful flags
+
+| Flag                | What it does                                                        |
+| ------------------- | ------------------------------------------------------------------- |
+| `--provider`        | Override the provider from your config for this run.                |
+| `--profile`         | Set the review profile (`chill` or `assertive`).                    |
+| `--thorough`        | Use the strongest model plus extra passes.                          |
+| `--max-findings`    | Cap the number of findings reported.                                |
+| `--max-files`       | Cap the number of files reviewed.                                   |
+| `--max-cost-usd`    | Hard USD ceiling; the run fails before or mid model calls if exceeded. |
+| `--no-verify`       | Skip the grounding verifier.                                        |
+
+Cost caps apply only to metered API providers — the local `claude-cli` / `codex-cli` backends are unmetered and report `$0.0000` by design. See [cost and budget](/docs/guides/cost-and-budget) for details.
+
+## 5. `lupe explain` — review one file
+
+To review just the changes to a single file, pass its path to `explain`:
+
+```bash
+lupe explain src/app.ts
+```
+
+`explain` accepts `-C`, `--provider`, and `--format`, and reviews only the changes to the given path.
+
+## Next steps
+
+- [CLI reference](/docs/reference/cli) — every command, flag, and default.
+- [Configuration](/docs/guides/configuration) — the full `.lupe.yaml` schema.
+- [Providers and models](/docs/guides/providers-and-models) — supported providers and how to pick models.

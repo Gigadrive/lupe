@@ -26,6 +26,12 @@ export interface LupeAiConfig {
   readonly region?: string;
   /** Display name for `openai-compatible`. */
   readonly name?: string;
+  /**
+   * Disable the agent's read-only repo tools (readFile/listDir/grep). Set when the
+   * checkout may contain untrusted code (pull_request_target) so the model cannot
+   * read the working tree. The prompt should also carry `hasTools: false`.
+   */
+  readonly disableTools?: boolean;
 }
 
 export interface ModelHandle {

@@ -1,8 +1,10 @@
 import { Effect } from 'effect';
 
+import { estimateGenerationCostUsd } from '../ai/estimate';
 import { AiModel, type AiError } from '../ai/model';
-import { modelCost } from '../ai/pricing';
+import { computeCost, modelCost, resolvePrice, type ModelPriceOverrides } from '../ai/pricing';
 import type { DiffFile } from '../diff';
+import { CostLimitError } from '../errors';
 import type { Finding } from '../finding';
 import { renderSummaryMarkdown } from '../render/markdown';
 import type { CostSummary, ReviewTarget, TokenUsage } from '../review';
@@ -26,6 +28,16 @@ export interface RunReviewOptions extends GenerateCandidatesOptions, FilterOptio
   readonly maxChunks?: number;
   /** Bounded concurrency for the fan-out chunk passes. Default 3. */
   readonly reviewConcurrency?: number;
+  /** Hard USD ceiling for the run. Enforced pre-flight and after the priming chunk. */
+  readonly maxCostUsd?: number;
+  /** Per-model price overrides used by the cost cap + cost accounting. */
+  readonly modelPrices?: ModelPriceOverrides;
+  /**
+   * Model id the review task will resolve to (e.g. `claude-opus-4-8`). Supplied by
+   * the caller so the pre-flight estimate can price the run before any model call.
+   * When omitted, only the post-priming actual-cost breaker enforces the cap.
+   */
+  readonly estimateModelId?: string;
 }
 
 export interface ReviewRunResult {
@@ -45,12 +57,14 @@ export interface ReviewRunResult {
 class CostAccumulator {
   private readonly byModel = new Map<string, TokenUsage>();
 
+  constructor(private readonly overrides?: ModelPriceOverrides) {}
+
   add(model: string, usage: TokenUsage): void {
     this.byModel.set(model, addUsage(this.byModel.get(model) ?? EMPTY_USAGE, usage));
   }
 
   summary(): CostSummary {
-    const perModel = [...this.byModel.entries()].map(([model, usage]) => modelCost(model, usage));
+    const perModel = [...this.byModel.entries()].map(([model, usage]) => modelCost(model, usage, this.overrides));
     const usage = perModel.reduce((acc, m) => addUsage(acc, m.usage), EMPTY_USAGE);
     const costUsd = perModel.reduce((acc, m) => acc + m.costUsd, 0);
     return { usage, costUsd, byModel: perModel };
@@ -67,9 +81,11 @@ export function runReview(
   files: readonly DiffFile[],
   target: ReviewTarget | undefined,
   options: RunReviewOptions = {}
-): Effect.Effect<ReviewRunResult, AiError, AiModel> {
+): Effect.Effect<ReviewRunResult, AiError | CostLimitError, AiModel> {
   return Effect.gen(function* () {
-    const cost = new CostAccumulator();
+    const overrides = options.modelPrices;
+    const maxCostUsd = options.maxCostUsd;
+    const cost = new CostAccumulator(overrides);
 
     // Build the frozen, cacheable prefix once and reuse it across every chunk so
     // it stays byte-identical — the Anthropic prompt cache is model-scoped and
@@ -81,12 +97,62 @@ export function runReview(
     });
     const { chunks } = plan;
 
+    // Pre-flight cost gate: fail BEFORE any model call when the estimate exceeds
+    // the cap, or when the cap cannot be enforced (unknown price → fail closed).
+    if (maxCostUsd !== undefined && chunks.length > 0 && options.estimateModelId) {
+      const est = estimateGenerationCostUsd({ system, chunks, modelId: options.estimateModelId, overrides });
+      if (!est.known) {
+        return yield* Effect.fail(
+          new CostLimitError({
+            message: `cannot enforce max-cost-usd $${maxCostUsd}: no known price for model "${options.estimateModelId}" (set modelPrices)`,
+            limitUsd: maxCostUsd,
+            estimatedUsd: est.estimatedUsd,
+          })
+        );
+      }
+      if (est.estimatedUsd > maxCostUsd) {
+        return yield* Effect.fail(
+          new CostLimitError({
+            message: `estimated review cost ~$${est.estimatedUsd.toFixed(2)} exceeds max-cost-usd $${maxCostUsd}`,
+            limitUsd: maxCostUsd,
+            estimatedUsd: est.estimatedUsd,
+          })
+        );
+      }
+    }
+
     const candidatesAll: Finding[] = [];
     if (chunks.length > 0) {
       // Prime the cache with the first chunk, then fan the rest out concurrently.
       const first = yield* generateCandidates(chunks[0]!, target, { ...options, system });
       cost.add(first.model, first.usage);
       candidatesAll.push(...first.findings);
+
+      // Post-priming breaker: measure the real cost of the priming chunk and, if the
+      // remaining chunks would push the run over the cap, abort before the fan-out.
+      if (maxCostUsd !== undefined && chunks.length > 1) {
+        const firstResolved = resolvePrice(first.model, overrides);
+        if (!firstResolved.known) {
+          return yield* Effect.fail(
+            new CostLimitError({
+              message: `cannot enforce max-cost-usd $${maxCostUsd}: no known price for model "${first.model}" (set modelPrices)`,
+              limitUsd: maxCostUsd,
+            })
+          );
+        }
+        const spentUsd = computeCost(first.model, first.usage, overrides);
+        const projectedUsd = spentUsd * chunks.length;
+        if (projectedUsd > maxCostUsd) {
+          return yield* Effect.fail(
+            new CostLimitError({
+              message: `projected review cost ~$${projectedUsd.toFixed(2)} across ${chunks.length} chunks exceeds max-cost-usd $${maxCostUsd}`,
+              limitUsd: maxCostUsd,
+              estimatedUsd: projectedUsd,
+              spentUsd,
+            })
+          );
+        }
+      }
 
       if (chunks.length > 1) {
         const rest = yield* Effect.forEach(

@@ -4,12 +4,14 @@ import {
   GitHubClient,
   GitHubError,
   INLINE_MARKER,
-  SUMMARY_MARKER,
+  parseInlinePath,
   parseState,
+  SUMMARY_MARKER,
   type AnchoredComment,
   type DiffFile,
   type GitHubClientService,
   type LinkedIssue,
+  type LupeReviewState,
   type PostReviewInput,
   type PullRequestRef,
 } from '@gigadrive/lupe-core';
@@ -52,6 +54,29 @@ export interface CompareResult {
     readonly status: string;
     readonly patch?: string;
   }>;
+}
+
+/**
+ * Walk the paginated compare endpoint, accumulating `files` across pages until a
+ * short page (fewer than `per_page`). Status is taken from page 1. GitHub caps
+ * the compare endpoint at 300 files over 3 pages — if the 3rd page is still full,
+ * more files exist than the compare API can return, so we throw and let the
+ * caller fall back to the fully-paginated `listFiles`. (The single-call version
+ * silently saw only the first 100 files.)
+ */
+export async function paginateCompare(fetchPage: (page: number) => Promise<CompareResult>): Promise<CompareResult> {
+  const PER_PAGE = 100;
+  const MAX_PAGES = 3;
+  const files: Array<NonNullable<CompareResult['files']>[number]> = [];
+  let status = '';
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const data = await fetchPage(page);
+    if (page === 1) status = data.status;
+    const pageFiles = data.files ?? [];
+    files.push(...pageFiles);
+    if (pageFiles.length < PER_PAGE) return { status, files };
+  }
+  throw new Error('incremental compare exceeds the 300-file compare limit; falling back to the full diff');
 }
 
 /**
@@ -101,8 +126,24 @@ interface ThreadsResponse {
   };
 }
 
-/** Resolve unresolved review threads that lupe authored, so re-reviews start clean. */
-async function resolveLupeThreads(octokit: LupeOctokit, pr: PullRequestRef): Promise<void> {
+/**
+ * Whether a lupe-authored thread (identified by its first comment `body`) should
+ * be resolved on this run. With `reviewedPaths`, only threads on a reviewed file
+ * are resolved; threads whose path can't be determined (older comments) resolve
+ * as before. Without `reviewedPaths`, every lupe thread resolves (full-diff run).
+ */
+export function shouldResolveThread(body: string, reviewedPaths?: ReadonlySet<string>): boolean {
+  if (!body.includes(INLINE_MARKER)) return false;
+  if (!reviewedPaths) return true;
+  const path = parseInlinePath(body);
+  return path === undefined || reviewedPaths.has(path);
+}
+
+async function resolveLupeThreads(
+  octokit: LupeOctokit,
+  pr: PullRequestRef,
+  reviewedPaths?: ReadonlySet<string>
+): Promise<void> {
   let cursor: string | null = null;
   for (;;) {
     const data = (await octokit.graphql(THREADS_QUERY, {
@@ -114,9 +155,8 @@ async function resolveLupeThreads(octokit: LupeOctokit, pr: PullRequestRef): Pro
     const threads = data.repository.pullRequest.reviewThreads;
     for (const thread of threads.nodes) {
       const body = thread.comments.nodes[0]?.body ?? '';
-      if (!thread.isResolved && body.includes(INLINE_MARKER)) {
-        await octokit.graphql(RESOLVE_MUTATION, { id: thread.id }).catch(() => undefined);
-      }
+      if (thread.isResolved || !shouldResolveThread(body, reviewedPaths)) continue;
+      await octokit.graphql(RESOLVE_MUTATION, { id: thread.id }).catch(() => undefined);
     }
     if (!threads.pageInfo.hasNextPage || !threads.pageInfo.endCursor) break;
     cursor = threads.pageInfo.endCursor;
@@ -165,12 +205,17 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
   ): Effect.Effect<readonly DiffFile[], GitHubError> =>
     Effect.tryPromise({
       try: async () => {
-        const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
-          owner: pr.owner,
-          repo: pr.repo,
-          basehead: `${baseSha}...${headSha}`,
-          per_page: 100,
-        });
+        const data = await paginateCompare((page) =>
+          octokit.rest.repos
+            .compareCommitsWithBasehead({
+              owner: pr.owner,
+              repo: pr.repo,
+              basehead: `${baseSha}...${headSha}`,
+              per_page: 100,
+              page,
+            })
+            .then((r) => r.data)
+        );
         return compareToDiffFiles(data);
       },
       catch: toGitHubError,
@@ -185,11 +230,21 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
+  const getReviewState = (pr: PullRequestRef): Effect.Effect<LupeReviewState | undefined, GitHubError> =>
+    Effect.tryPromise({
+      try: async () => {
+        const sticky = await findSticky(octokit, pr);
+        return sticky ? parseState(sticky.body) : undefined;
+      },
+      catch: toGitHubError,
+    });
+
   const postReview = (input: PostReviewInput): Effect.Effect<void, GitHubError> =>
     Effect.tryPromise({
       try: async () => {
         if (input.resolveStaleThreads) {
-          await resolveLupeThreads(octokit, input.pr).catch(() => undefined);
+          const scope = input.reviewedPaths ? new Set(input.reviewedPaths) : undefined;
+          await resolveLupeThreads(octokit, input.pr, scope).catch(() => undefined);
         }
 
         if (input.comments.length > 0) {
@@ -273,7 +328,7 @@ export function makeGitHubClient(config: OctokitConfig): GitHubClientService {
       catch: toGitHubError,
     });
 
-  return { listDiff, listDiffSince, getLastReviewedSha, postReview, getRelatedIssues };
+  return { listDiff, listDiffSince, getLastReviewedSha, getReviewState, postReview, getRelatedIssues };
 }
 
 /** Effect Layer providing the GitHub transport for a token. */

@@ -1,0 +1,12 @@
+{
+  "title": "Guides",
+  "pages": [
+    "how-it-works",
+    "configuration",
+    "providers-and-models",
+    "findings-and-output",
+    "large-prs",
+    "cost-and-budget",
+    "security-and-privacy"
+  ]
+}

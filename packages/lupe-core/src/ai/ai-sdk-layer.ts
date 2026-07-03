@@ -60,7 +60,9 @@ export function AiSdkLive(config: LupeAiConfig): Layer.Layer<AiModel, never, Rep
     AiModel,
     Effect.gen(function* () {
       const repo = yield* RepoSource;
-      const tools = buildRepoTools(repo);
+      // When the checkout is untrusted (pull_request_target), run tool-less so the
+      // model can't read the working tree via readFile/grep.
+      const tools = config.disableTools ? {} : buildRepoTools(repo);
       const resolveModel = createModelResolver(config);
       const cacheable = config.provider === 'anthropic';
 

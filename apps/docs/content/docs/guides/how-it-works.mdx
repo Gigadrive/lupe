@@ -1,0 +1,50 @@
+---
+title: How lupe reviews
+description: How a review turns a diff into a handful of trustworthy, well-anchored comments instead of noise.
+---
+
+lupe is precision-first. Rather than surface every possible nit, it deliberately over-detects and then earns each comment back through a grounding verifier and a filter chain. The result is a small set of high-signal comments — typically around five actionable ones per pull request — instead of a wall of noise.
+
+Every review moves through the same stages, whether you run it as a [GitHub Action](/docs/guides/configuration) or the [CLI](/docs/reference/cli).
+
+## 1. Acquire the diff and a little context
+
+lupe starts from the changed diff. Before the model ever sees it, the diff is compressed: generated files, lockfiles, and binary blobs are collapsed away so the review budget is spent on code you actually wrote, and your [path filters](/docs/guides/configuration) are applied to include or exclude the files you care about. Alongside the changes, lupe gathers just enough surrounding context to reason about them.
+
+For very large pull requests the diff is split into multiple passes and reviewed together. See [large PRs](/docs/guides/large-prs) for how that map-reduce works and how to tune it.
+
+## 2. Generate candidates, biased for recall
+
+A model reads the prepared diff and proposes candidate findings. This stage is deliberately tuned for high recall: it is better to over-detect here and let later stages remove what doesn't hold up than to miss a real bug. Each candidate carries a severity, a category, a confidence score, and the evidence it cites in the code.
+
+Because these are only candidates, a raw generation pass is expected to contain speculative or overstated claims. Those are the next stage's job.
+
+## 3. Verify each finding against the code
+
+Every candidate is re-checked by a separate grounding verifier, which runs on a cheaper model and looks only at the finding and the code it cites. The verifier judges three things independently:
+
+- **Is it grounded?** A finding is dropped when it is speculative, points at unreachable or dead code, is already handled by nearby code, relies on code that wasn't shown, or is a pure style preference. When in doubt, the verifier rejects.
+- **Is the impact confirmed?** Sometimes the mechanism is real and visible, but the claimed consequence depends on a precondition that isn't in view — an off-context caller, an external contract, or an unproven input. In that case the finding is *kept* but its severity is capped to low, framed as a latent footgun rather than dropped or overstated.
+- **Is the suggested fix valid?** If a finding ships a proposed code suggestion that wouldn't compile, is a no-op, or wouldn't actually resolve the problem, the broken suggestion is stripped while the explanation survives.
+
+This is where most false positives disappear.
+
+## 4. Filter, gate, and cap
+
+Surviving findings run through a filter chain that decides which ones are worth publishing:
+
+- **Dedupe** collapses duplicates that share a location and rule, keeping the most confident.
+- **Confidence and severity gates** drop findings that fall below your thresholds. Gates resolve with clear precedence — a matching path glob wins over a category rule, which wins over the global confidence floor — so you can tighten or loosen specific files or categories without touching the rest.
+- **Advisory suppression**, when enabled, drops advisory findings (`style`, `maintainability`, `docs`, `test`) entirely.
+- **Learnings suppression** removes anything matching the phrases lupe has learned from comments you previously dismissed, so it stops repeating feedback you've rejected.
+- **Sort and cap** orders what remains by severity (then confidence) and trims to your maximum number of findings.
+
+All of these knobs — thresholds, path and category gates, advisory suppression, and the findings cap — live in your [configuration](/docs/guides/configuration).
+
+## 5. Anchor and publish
+
+Each surviving finding is anchored to the exact changed lines it refers to, so comments land on the right code instead of drifting. lupe then publishes the results — inline comments plus a summary — for you to act on. For details on what a finding contains and the formats lupe can emit, see [findings and output](/docs/guides/findings-and-output).
+
+<Callout type="info">
+The payoff of these stages is a low, predictable noise budget: lupe aims for roughly five actionable comments per pull request, so the comments that do land are worth reading.
+</Callout>

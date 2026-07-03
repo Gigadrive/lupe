@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 
 import type { Finding } from '../finding';
 import {
+  buildReviewState,
   encodeState,
+  parseInlinePath,
   parseState,
   renderInlineComment,
   renderSummaryMarkdown,
@@ -63,5 +65,29 @@ describe('markdown rendering', () => {
       lastReviewedSha: 'deadbeef',
       findingCount: 3,
     });
+  });
+
+  test('inline comment embeds a parseable path marker', () => {
+    const body = renderInlineComment(finding({ path: 'src/db.ts' }));
+    expect(parseInlinePath(body)).toBe('src/db.ts');
+    expect(parseInlinePath('no marker here')).toBeUndefined();
+  });
+
+  test('buildReviewState carries finding digests + posted keys and round-trips', () => {
+    const state = buildReviewState({ headSha: 'abc', findings: [finding()], postedKeys: ['k1', 'k2'] });
+    const md = renderSummaryMarkdown([finding()], { state });
+    const parsed = parseState(md);
+    expect(parsed?.findings).toHaveLength(1);
+    expect(parsed?.findings?.[0]!.path).toBe('src/db.ts');
+    expect(parsed?.postedKeys).toEqual(['k1', 'k2']);
+  });
+
+  test('buildReviewState caps digests at 80 (keeps most severe)', () => {
+    const many = Array.from({ length: 200 }, (_, i) =>
+      finding({ severity: i === 0 ? 'critical' : 'low', startLine: i + 1, ruleId: `lupe/x/r${i}` })
+    );
+    const state = buildReviewState({ headSha: 'abc', findings: many });
+    expect(state.findings).toHaveLength(80);
+    expect(state.findings?.[0]!.severity).toBe('critical');
   });
 });

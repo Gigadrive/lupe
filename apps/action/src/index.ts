@@ -8,18 +8,24 @@ import { parse as parseYaml } from 'yaml';
 
 import {
   AiSdkLive,
+  buildReviewState,
+  findingContentKey,
   findingsForInlineComment,
   GitHubClient,
+  mergeIncrementalFindings,
   normalizeConfig,
+  renderSummaryMarkdown,
+  resolveTaskModelId,
   runReview,
   SEVERITY_RANK,
   type ApiProviderId,
   type LupeConfig,
   type ReviewProfile,
   type ReviewTarget,
+  type ReviewTask,
   type Severity,
 } from '@gigadrive/lupe-core';
-import { compressDiff, discoverCodingStandards, RepoSourceLive } from '@gigadrive/lupe-git';
+import { compressDiff, discoverCodingStandards, redactSecrets, RepoSourceLive } from '@gigadrive/lupe-git';
 import { anchorFindings, GitHubClientLive } from '@gigadrive/lupe-github';
 
 const FAIL_NONE = 'none';
@@ -88,10 +94,20 @@ const program = Effect.gen(function* () {
     core.info('lupe: no pull_request in the event payload; skipping.');
     return;
   }
-  if (ctx.eventName === 'pull_request_target') {
-    core.warning(
-      'lupe: running on pull_request_target — do NOT check out untrusted PR code in this job (RCE/secret-exfil risk).'
+  // pull_request_target runs with a writable token + repo secrets. If the job also
+  // checks out the PR head, the agent's tools + the diff are an RCE/secret-exfil
+  // vector. Refuse by default; the explicit opt-in still runs tool-less (below).
+  const untrusted = ctx.eventName === 'pull_request_target';
+  const allowUntrusted = core.getInput('allow-untrusted-checkout').trim().toLowerCase() === 'true';
+  if (untrusted && !allowUntrusted) {
+    core.setFailed(
+      'lupe: refusing to run on pull_request_target (RCE/secret-exfil risk). Use the `pull_request` trigger, ' +
+        'or set allow-untrusted-checkout: true only if this job does NOT check out untrusted PR code.'
     );
+    return;
+  }
+  if (untrusted) {
+    core.warning('lupe: pull_request_target with allow-untrusted-checkout — running tool-less (no repo file access).');
   }
 
   const owner = ctx.repo.owner;
@@ -130,18 +146,30 @@ const program = Effect.gen(function* () {
   const maxChunkTokens = intInput('max-chunk-tokens') ?? config.maxChunkTokens;
   const maxChunks = intInput('max-chunks') ?? config.maxChunks;
   const reviewConcurrency = intInput('review-concurrency') ?? config.reviewConcurrency;
+  const maxCostUsd = numInput('max-cost-usd') ?? config.maxCostUsd;
   const thorough = (core.getInput('thorough') || 'false') === 'true';
+  const task: ReviewTask = thorough ? 'deep' : 'review';
+  // Resolve the review-task model up front so the cost cap can price the run
+  // pre-flight. Non-Anthropic providers without a configured model throw here;
+  // fall back to the post-priming breaker and let the real call surface the error.
+  let estimateModelId: string | undefined;
+  try {
+    estimateModelId = resolveTaskModelId({ provider, models }, task);
+  } catch {
+    estimateModelId = undefined;
+  }
   const failOn = (core.getInput('fail-on-severity') || FAIL_NONE).toLowerCase();
   const codingStandards = discoverCodingStandards({ rootDir: workspace, explicit: config.codingStandards });
 
   const repoLayer = RepoSourceLive({ rootDir: workspace });
-  const aiLayer = AiSdkLive({ provider, models, baseURL }).pipe(Layer.provide(repoLayer));
+  const aiLayer = AiSdkLive({ provider, models, baseURL, disableTools: untrusted }).pipe(Layer.provide(repoLayer));
   const githubLayer = GitHubClientLive({ token });
   const layer = Layer.mergeAll(repoLayer, aiLayer, githubLayer);
 
   const run = Effect.gen(function* () {
     const gh = yield* GitHubClient;
-    const lastReviewedSha = yield* gh.getLastReviewedSha(prRef);
+    const prior = yield* gh.getReviewState(prRef);
+    const lastReviewedSha = prior?.lastReviewedSha;
     // Incremental: only review commits since the last reviewed SHA. Fall back to
     // the full diff on the first review or any non-fast-forward (rebase/force-push).
     const incremental = lastReviewedSha !== undefined && lastReviewedSha !== headSha;
@@ -159,6 +187,12 @@ const program = Effect.gen(function* () {
       return;
     }
 
+    // Strip likely secrets from the diff before it reaches the model (BYO-token hygiene).
+    const redacted = redactSecrets(compressed.files);
+    if (redacted.redactions > 0) {
+      core.info(`lupe: redacted ${redacted.redactions} line(s) with likely secrets before review.`);
+    }
+
     const target: ReviewTarget = {
       kind: 'pull_request',
       repo: { owner, repo },
@@ -171,8 +205,9 @@ const program = Effect.gen(function* () {
       isDraft,
     };
 
-    const result = yield* runReview(compressed.files, target, {
+    const result = yield* runReview(redacted.files, target, {
       profile,
+      hasTools: !untrusted,
       codingStandards,
       pathInstructions: config.pathInstructions,
       confidenceThreshold,
@@ -183,26 +218,51 @@ const program = Effect.gen(function* () {
       maxChunkTokens,
       maxChunks,
       reviewConcurrency,
+      maxCostUsd,
+      modelPrices: config.modelPrices,
+      estimateModelId,
       verify: true,
-      task: thorough ? 'deep' : 'review',
+      task,
     });
 
-    const inline = findingsForInlineComment(result.findings, minSeverityToComment);
+    // Carry forward findings on files not reviewed this run so the sticky summary
+    // stays cumulative instead of reflecting only the latest slice.
+    const reviewedPaths = compressed.files.map((f) => f.path);
+    const merged = incremental
+      ? mergeIncrementalFindings(prior?.findings ?? [], result.findings, new Set(reviewedPaths))
+      : result.findings;
+
+    // Only post inline for findings not already shown in a prior run (cross-run dedupe,
+    // so a force-push full-diff fallback doesn't re-post). Only this run's findings anchor.
+    const priorKeys = new Set(prior?.postedKeys ?? []);
+    const freshForInline = result.findings.filter((f) => !priorKeys.has(findingContentKey(f)));
+    const inline = findingsForInlineComment(freshForInline, minSeverityToComment);
     const { comments, unanchored } = anchorFindings(inline, compressed.files);
+    const postedKeys = [...priorKeys, ...inline.map((f) => findingContentKey(f))];
+
+    const summaryBody = renderSummaryMarkdown(merged, {
+      cost: result.cost,
+      chunkCount: result.chunkCount,
+      skippedForSize: result.skippedForSize,
+      oversizedFiles: result.oversizedFiles,
+      state: buildReviewState({ headSha, findings: merged, postedKeys }),
+    });
+
     yield* gh.postReview({
       pr: prRef,
       headSha,
       comments,
-      summaryBody: result.summaryMarkdown,
+      summaryBody,
       resolveStaleThreads: true,
+      reviewedPaths,
     });
 
-    core.setOutput('findings', String(result.findings.length));
+    core.setOutput('findings', String(merged.length));
     core.setOutput('cost-usd', result.cost.costUsd.toFixed(4));
     core.setOutput('skipped', String(result.skippedForSize.length));
     const passes = result.chunkCount > 1 ? ` · ${result.chunkCount} passes` : '';
     core.info(
-      `lupe: ${result.findings.length} findings (${comments.length} inline, ${unanchored.length} summary-only) · ~$${result.cost.costUsd.toFixed(
+      `lupe: ${merged.length} findings (${comments.length} new inline, ${unanchored.length} summary-only) · ~$${result.cost.costUsd.toFixed(
         4
       )}${passes}`
     );
@@ -216,7 +276,7 @@ const program = Effect.gen(function* () {
     if (failOn !== FAIL_NONE) {
       const threshold = SEVERITY_RANK[failOn as Severity];
       if (threshold !== undefined) {
-        const blocking = result.findings.filter((f) => SEVERITY_RANK[f.severity] <= threshold);
+        const blocking = merged.filter((f) => SEVERITY_RANK[f.severity] <= threshold);
         if (blocking.length > 0) {
           core.setFailed(`lupe: ${blocking.length} finding(s) at or above severity "${failOn}".`);
         }

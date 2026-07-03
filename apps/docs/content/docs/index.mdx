@@ -1,0 +1,88 @@
+---
+title: Introduction
+description: lupe is an open-source, bring-your-own-token AI code review agent that runs on your own model tokens.
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+**lupe** (German for *magnifying glass*) is a platform- and provider-agnostic AI code review
+agent. It reviews your pull requests — or a local diff — using **your own** provider tokens, as an
+open-source alternative to hosted tools like CodeRabbit, Cursor Bugbot, Greptile, and Macroscope.
+
+There is no SaaS to sign up for and no per-seat pricing: you point lupe at a model you already pay
+for (Anthropic, OpenAI, Google, Amazon Bedrock, or any OpenAI-compatible gateway) and it does the
+review on your infrastructure and your budget.
+
+## Why lupe
+
+- **Provider-agnostic.** One review engine, any model. Switching provider or model is a single
+  config value — the engine asks for a *task* (triage, review, verify, deep), never a hard-coded
+  model id.
+- **Bring your own tokens.** Your keys, your spend. The only secret a repository needs is your
+  provider API key; GitHub access uses the built-in `GITHUB_TOKEN`.
+- **Two surfaces, one core.** A reusable **GitHub Action** reviews pull requests, and a local
+  **CLI** reviews diffs from your terminal — both call the exact same engine. An embeddable
+  **SDK** lets you run reviews from your own code.
+- **Precision-first.** Generation is deliberately high-recall, then a grounding verifier and a
+  filter chain gate what actually gets published — the goal is a handful of actionable comments per
+  PR, not noise.
+
+## Start here
+
+<Cards>
+  <Card
+    title="GitHub Action quickstart"
+    href="/docs/getting-started/github-action"
+    description="Add lupe to a repository and have it review every pull request."
+  />
+  <Card
+    title="CLI quickstart"
+    href="/docs/getting-started/cli"
+    description="Review a local branch or diff from your terminal."
+  />
+  <Card
+    title="How it works"
+    href="/docs/guides/how-it-works"
+    description="The review flow: high-recall generation, grounding, and filtering."
+  />
+  <Card
+    title="Configuration"
+    href="/docs/guides/configuration"
+    description="Every .lupe.yaml option, explained."
+  />
+</Cards>
+
+## Explore
+
+<Cards>
+  <Card
+    title="Providers & models"
+    href="/docs/guides/providers-and-models"
+    description="Supported providers, task→model routing, and local backends."
+  />
+  <Card
+    title="Cost & budget"
+    href="/docs/guides/cost-and-budget"
+    description="Cost accounting, pricing, and hard spend caps."
+  />
+  <Card
+    title="Security & privacy"
+    href="/docs/guides/security-and-privacy"
+    description="Redaction, the pull_request_target guard, and the BYO-token model."
+  />
+  <Card
+    title="CLI reference"
+    href="/docs/reference/cli"
+    description="Every command and flag."
+  />
+  <Card
+    title="GitHub Action reference"
+    href="/docs/reference/github-action"
+    description="Every input and output."
+  />
+  <Card
+    title="SDK reference"
+    href="/docs/reference/sdk"
+    description="Embed reviewDiff and reviewPullRequest in your own tools."
+  />
+</Cards>

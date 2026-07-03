@@ -1,0 +1,212 @@
+---
+title: Configuration
+description: The complete .lupe.yaml reference — every key, its type, default, and meaning.
+---
+
+lupe reads an optional project config file at your repository root. It controls which provider and models run the review, how findings are filtered before they are published, how large diffs are chunked, and how much a run is allowed to cost. Everything here is optional — with no config file at all, lupe runs with sensible defaults.
+
+## Where config lives
+
+lupe looks for its config at the repository root, in this order:
+
+1. `.lupe.yaml`
+2. `.lupe.yml`
+3. A `lupe.config.*` file (for example `lupe.config.ts`, `lupe.config.js`, `lupe.config.mjs`, or `lupe.config.json`), loaded via [c12](https://github.com/unjs/c12).
+
+The first one found wins. Most projects use `.lupe.yaml`.
+
+<Callout type="info">
+Every key accepts BOTH `camelCase` and `snake_case` — `maxCostUsd` and `max_cost_usd` are equivalent, as are the nested keys like `minConfidence` / `min_confidence`. Pick one style and stay consistent. The examples below use `snake_case`.
+</Callout>
+
+## Key reference
+
+Defaults shown are what lupe uses when the key is omitted. Keys without a default are simply unset (no gate / no cap) unless noted.
+
+| Key (both forms) | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `profile` | `"chill"` \| `"assertive"` | `chill` | Review temperament. `chill` reports only medium+ severity, high-confidence problems and suppresses nitpicks. `assertive` also surfaces lower-severity, lower-confidence issues (clearly marked). |
+| `provider` | string | — | The model backend (for example `anthropic`, `openai`, `google`, `bedrock`, `openai-compatible`, `gateway`, plus the CLI-only local backends). See [providers and models](/docs/guides/providers-and-models). |
+| `models` | map: `triage` \| `review` \| `verify` \| `deep` → model id | Anthropic only | Per-task model routing. Anthropic ships built-in defaults; every other provider must set these explicitly. See below. |
+| `baseURL` / `base_url` | string | — | Overrides the provider endpoint. Required for `openai-compatible`. See [providers and models](/docs/guides/providers-and-models). |
+| `pathFilters` / `path_filters` | list of glob strings | — | Which files to review. CodeRabbit-style globs; `!`-prefixed patterns exclude; last match wins. See below. |
+| `pathInstructions` / `path_instructions` | list of `{ path, instructions }` | — | Extra, path-scoped review guidance injected into the prompt. `path` is a glob; `instructions` is free text. |
+| `codingStandards` / `coding_standards` | string | auto-discovered | Explicit project coding standards / conventions. When set, this overrides the auto-discovered rule files (see below). |
+| `maxFiles` / `max_files` | number | — | Cap on the number of files reviewed (highest-ranked first). Unset means all files that fit the token budget. |
+| `maxFindings` / `max_findings` | number | — | Cap on kept findings after filtering (most severe + confident first). |
+| `confidenceThreshold` / `confidence_threshold` | number `0..1` | `0.5` | The global confidence floor. Findings below it are dropped before publication. |
+| `suppressAdvisory` / `suppress_advisory` | boolean | `false` | Drop advisory findings (`style`, `maintainability`, `docs`, `test`) entirely. |
+| `categoryThresholds` / `category_thresholds` | map: category → `{ minConfidence?, minSeverity? }` | — | Per-category gates that override the global floor for that category. See [thresholds](#thresholds-and-precedence). |
+| `pathThresholds` / `path_thresholds` | list of `{ glob, minConfidence?, minSeverity? }` | — | Per-path-glob gates, highest precedence; last matching rule wins. See [thresholds](#thresholds-and-precedence). |
+| `minSeverityToComment` / `min_severity_to_comment` | severity | — | Transport gate: findings less severe than this stay summary-only instead of being posted as inline comments (applies when posting to GitHub). |
+| `maxChunkTokens` / `max_chunk_tokens` | number | `120000` | Serialised-diff token budget per review chunk for large PRs. See [large PRs](/docs/guides/large-prs). |
+| `maxChunks` / `max_chunks` | number | `8` | Hard ceiling on the number of chunks (a cost bound). Files beyond it are reported as skipped, never dropped silently. |
+| `reviewConcurrency` / `review_concurrency` | number | `3` | Bounded concurrency for the fan-out chunk passes. |
+| `maxCostUsd` / `max_cost_usd` | number | — | Hard USD ceiling for one review run. Over-budget runs fail before or mid model calls, before posting. See [cost and budget](/docs/guides/cost-and-budget). |
+| `modelPrices` / `model_prices` | map: model id → `{ input, output, cacheRead?, cacheWrite? }` | vendored table | Per-model price overrides (USD per 1M tokens) for accurate cost accounting on BYO / self-hosted endpoints. See below. |
+
+## Models per task
+
+The reviewer routes different stages to different models: `triage` (cheap first pass), `review` (the main pass), `verify` (grounding check), and `deep` (heaviest reasoning). Set any subset in `models`:
+
+```yaml
+models:
+  triage: claude-haiku-4-5
+  review: claude-opus-4-8
+  verify: claude-sonnet-4-6
+  deep: claude-fable-5
+```
+
+Anthropic is the only provider that ships built-in per-task defaults (the four ids above). With any other provider you must set the model ids yourself, or the run will error for the missing task. See [providers and models](/docs/guides/providers-and-models) for the full provider list and endpoint details.
+
+## Categories and severities
+
+Every finding carries a `category` and a `severity`. These are the values you use in `categoryThresholds`, `pathThresholds`, `minSeverityToComment`, and `suppressAdvisory`.
+
+Categories: `correctness`, `security`, `performance`, `concurrency`, `error-handling`, `resource-leak`, `api-misuse`, `data-loss`, `maintainability`, `style`, `test`, `docs`.
+
+Severities (most to least severe): `critical`, `high`, `medium`, `low`, `info`.
+
+<Callout type="info">
+The four advisory categories — `style`, `maintainability`, `docs`, and `test` — are surfaced like any other finding but are never CI-blocking. Set `suppress_advisory: true` to drop them entirely. See [findings and output](/docs/guides/findings-and-output) for how severities and categories drive output.
+</Callout>
+
+## Thresholds and precedence
+
+A threshold is a gate with two optional fields:
+
+- `minConfidence` (`0..1`) — drop findings below this confidence.
+- `minSeverity` — drop findings less severe than this. For example `minSeverity: high` keeps `critical` and `high` and drops `medium`, `low`, and `info`.
+
+Gates can be set globally, per category, or per path glob. The effective gate for each finding is resolved with this precedence:
+
+```text
+path glob  >  category  >  global confidence floor (default 0.5)
+```
+
+A more specific rule only overrides the fields it actually sets — an unset field falls through to the next level. Among `pathThresholds`, the last matching rule wins.
+
+```yaml
+# Global floor
+confidence_threshold: 0.6
+
+# Per-category overrides
+category_thresholds:
+  security:
+    min_confidence: 0.4   # cast a wider net on security
+    min_severity: high    # ...but only high+ severity
+  style:
+    min_confidence: 0.9   # only near-certain style nits
+
+# Per-path overrides (highest precedence, last match wins)
+path_thresholds:
+  - glob: 'test/**'
+    min_severity: high
+```
+
+## Path filters
+
+`pathFilters` decide which changed files are reviewed. Patterns are CodeRabbit-style globs; a bare pattern includes, a `!`-prefixed pattern excludes, and the last matching pattern wins (files match by default when no pattern matches).
+
+```yaml
+path_filters:
+  - 'apps/**'
+  - 'packages/**'
+  - '!**/dist/**'
+  - '!**/*.min.js'
+```
+
+Regardless of your filters, lupe automatically drops files it can't usefully review: binary files, known lockfiles, and generated files.
+
+## Path instructions and coding standards
+
+`pathInstructions` attach extra guidance to files matching a glob — useful for domain rules the model wouldn't infer from the diff alone:
+
+```yaml
+path_instructions:
+  - path: 'packages/**/migrations/**'
+    instructions: Flag any non-reversible or lock-taking migration.
+  - path: 'apps/api/**'
+    instructions: Treat all request input as untrusted.
+```
+
+`codingStandards` injects your project's conventions into the review prompt. When you don't set it, lupe auto-discovers common rule files at the repo root and folds them in: `CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `.cursor/rules/*.mdc`, `.gemini/styleguide.md`, and `.github/copilot-instructions.md`. Setting `codingStandards` explicitly overrides that auto-discovery.
+
+## Model prices
+
+lupe ships a vendored price table so cost accounting works out of the box for the common models. For a self-hosted or otherwise non-standard endpoint, supply exact prices (USD per 1M tokens), keyed by the exact model id:
+
+```yaml
+model_prices:
+  my-self-hosted-llama:
+    input: 0.2
+    output: 0.6
+    cache_read: 0.02   # optional; defaults to 0.1 × input
+    cache_write: 0.25  # optional; defaults to 1.25 × input
+```
+
+An override wins over the vendored table for that model id. See [cost and budget](/docs/guides/cost-and-budget) for how prices combine with `maxCostUsd` to cap a run.
+
+## Learnings
+
+When a reviewer comment is dismissed, lupe can learn to stop reporting that pattern — those learned suppressions are applied automatically during filtering. They are managed through the CLI rather than a config key; see `lupe learn` in the [CLI reference](/docs/reference/cli).
+
+## A complete example
+
+```yaml
+# .lupe.yaml — at the repository root
+profile: chill
+provider: anthropic
+
+# Per-task model routing (Anthropic ships these defaults; other providers must set them)
+models:
+  triage: claude-haiku-4-5
+  review: claude-opus-4-8
+  verify: claude-sonnet-4-6
+  deep: claude-fable-5
+
+# Review app + package source; never the built bundles or minified vendor code
+path_filters:
+  - 'apps/**'
+  - 'packages/**'
+  - '!**/dist/**'
+  - '!**/*.min.js'
+
+# Extra, path-scoped review guidance
+path_instructions:
+  - path: 'packages/**/migrations/**'
+    instructions: Flag any non-reversible or lock-taking migration.
+  - path: 'apps/api/**'
+    instructions: Treat all request input as untrusted.
+
+# Publication gates
+confidence_threshold: 0.6
+category_thresholds:
+  security:
+    min_confidence: 0.4
+    min_severity: high
+  style:
+    min_confidence: 0.9
+path_thresholds:
+  - glob: 'test/**'
+    min_severity: high
+
+# Only post high+ findings inline; the rest stay in the summary
+min_severity_to_comment: high
+
+# Large-PR map-reduce bounds
+max_chunk_tokens: 120000
+max_chunks: 8
+review_concurrency: 3
+
+# Hard per-run USD ceiling; over-budget runs fail before posting
+max_cost_usd: 2
+```
+
+## See also
+
+- [Providers and models](/docs/guides/providers-and-models) — `provider`, `models`, `baseURL`.
+- [Cost and budget](/docs/guides/cost-and-budget) — `maxCostUsd`, `modelPrices`.
+- [Findings and output](/docs/guides/findings-and-output) — severities and categories.
+- [Large PRs](/docs/guides/large-prs) — the chunking keys.
+- [CLI reference](/docs/reference/cli) — commands, flags, and `lupe learn`.

@@ -1,4 +1,4 @@
-import type { Finding, Severity } from '../finding';
+import type { Category, Finding, Severity, Side } from '../finding';
 import { SEVERITY_RANK, isAdvisory } from '../finding';
 import type { CostSummary } from '../review';
 
@@ -11,11 +11,75 @@ export const INLINE_MARKER = '🔍 lupe';
 const STATE_PREFIX = '<!-- lupe-state:';
 const STATE_SUFFIX = '-->';
 
+/**
+ * A compact, serialisable summary of a finding, persisted in the sticky comment
+ * state so incremental re-reviews can carry forward findings on files that
+ * weren't part of the new slice (rendered summary-only, never re-anchored).
+ */
+export interface FindingDigest {
+  readonly ruleId: string;
+  readonly path: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly side: Side;
+  readonly severity: Severity;
+  readonly category: Category;
+  readonly title: string;
+  readonly confidence: number;
+}
+
+export function toDigest(f: Finding): FindingDigest {
+  return {
+    ruleId: f.ruleId,
+    path: f.path,
+    startLine: f.startLine,
+    endLine: f.endLine,
+    side: f.side,
+    severity: f.severity,
+    category: f.category,
+    title: f.title,
+    confidence: f.confidence,
+  };
+}
+
+/** Reconstruct a (summary-only) Finding from a digest; `message` falls back to the title. */
+export function fromDigest(d: FindingDigest): Finding {
+  return { ...d, message: d.title, evidence: [] };
+}
+
 /** Persisted, machine-readable review state embedded in the sticky comment. */
 export interface LupeReviewState {
   readonly version: number;
   readonly lastReviewedSha?: string;
   readonly findingCount?: number;
+  /** Digests of the currently-standing findings (for cumulative incremental summaries). */
+  readonly findings?: readonly FindingDigest[];
+  /** Content keys of findings already posted inline (cross-run dedupe). */
+  readonly postedKeys?: readonly string[];
+}
+
+/** Keep the sticky comment well under GitHub's ~65k limit. */
+const MAX_STATE_DIGESTS = 80;
+const MAX_STATE_POSTED_KEYS = 500;
+
+/** Build a capped review state from the standing finding set + posted keys. */
+export function buildReviewState(input: {
+  readonly headSha?: string;
+  readonly findings: readonly Finding[];
+  readonly postedKeys?: readonly string[];
+}): LupeReviewState {
+  const digests = [...input.findings]
+    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
+    .slice(0, MAX_STATE_DIGESTS)
+    .map(toDigest);
+  const postedKeys = input.postedKeys ? input.postedKeys.slice(-MAX_STATE_POSTED_KEYS) : undefined;
+  return {
+    version: 1,
+    lastReviewedSha: input.headSha,
+    findingCount: input.findings.length,
+    findings: digests,
+    ...(postedKeys && postedKeys.length > 0 ? { postedKeys } : {}),
+  };
 }
 
 export function encodeState(state: LupeReviewState): string {
@@ -68,7 +132,17 @@ export function renderInlineComment(finding: Finding): string {
   const pct = Math.round(finding.confidence * 100);
   lines.push('');
   lines.push(`<sub>${INLINE_MARKER} · \`${finding.ruleId}\` · confidence ${pct}%</sub>`);
+  // Hidden marker so re-reviews resolve only threads on files reviewed this run.
+  lines.push(`<!-- lupe:path=${finding.path} -->`);
   return lines.join('\n');
+}
+
+const INLINE_PATH_MARKER = /<!-- lupe:path=(.*?) -->/;
+
+/** Extract the file path embedded in a lupe inline comment body (see {@link renderInlineComment}). */
+export function parseInlinePath(body: string): string | undefined {
+  const m = INLINE_PATH_MARKER.exec(body);
+  return m ? m[1] : undefined;
 }
 
 function countBySeverity(findings: readonly Finding[]): Record<Severity, number> {

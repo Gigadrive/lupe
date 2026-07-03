@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { fnv1a } from './util/hash';
+
 /**
  * The Finding model is the single source of truth for everything the reviewer
  * emits. The same Zod schema is used for (a) the AI SDK structured-output
@@ -126,6 +128,16 @@ export function findingsForInlineComment(findings: readonly Finding[], minSeveri
   if (minSeverity === undefined) return findings;
   const ceiling = SEVERITY_RANK[minSeverity];
   return findings.filter((f) => SEVERITY_RANK[f.severity] <= ceiling);
+}
+
+/**
+ * Stable cross-run identity for a finding, used to avoid re-posting the same
+ * finding inline on a later run (e.g. after a force-push falls back to the full
+ * diff). Keyed on location + side + rule only — deliberately reconstructable
+ * from a persisted {@link FindingDigest} (which has no `message`).
+ */
+export function findingContentKey(f: Pick<Finding, 'path' | 'startLine' | 'endLine' | 'side' | 'ruleId'>): string {
+  return fnv1a(`${f.path}:${f.startLine}:${f.endLine}:${f.side}:${f.ruleId}`);
 }
 
 /** Normalise a free-form ruleId into the canonical `lupe/<category>/<slug>` shape. */

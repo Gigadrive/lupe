@@ -6,12 +6,14 @@ import {
   RepoSource,
   findingsForInlineComment,
   renderSarif,
+  resolveTaskModelId,
   runReview,
   type Category,
   type CategoryThreshold,
   type CostSummary,
   type Finding,
   type LupeAiConfig,
+  type ModelPriceOverrides,
   type PathThreshold,
   type PullRequestRef,
   type ReviewProfile,
@@ -53,6 +55,10 @@ export interface ReviewTuning {
   readonly maxChunks?: number;
   /** Bounded concurrency for the fan-out chunk passes. Default 3. */
   readonly reviewConcurrency?: number;
+  /** Hard USD ceiling for the run; over-budget runs reject before/mid the model calls. */
+  readonly maxCostUsd?: number;
+  /** Per-model price overrides (keyed by exact model id) for accurate cost on BYO endpoints. */
+  readonly modelPrices?: ModelPriceOverrides;
 }
 
 export interface ReviewResult {
@@ -71,6 +77,15 @@ const EMPTY_COST: CostSummary = {
 
 function toResult(findings: readonly Finding[], summaryMarkdown: string, cost: CostSummary): ReviewResult {
   return { findings, summaryMarkdown, cost, sarif: () => renderSarif(findings) };
+}
+
+/** Resolve the review-task model id up front so the cost cap can price the run pre-flight. */
+function resolveEstimateModel(ai: LupeAiConfig, thorough?: boolean): string | undefined {
+  try {
+    return resolveTaskModelId(ai, thorough ? 'deep' : 'review');
+  } catch {
+    return undefined;
+  }
 }
 
 const EMPTY_RESULT: ReviewResult = toResult([], '', EMPTY_COST);
@@ -131,6 +146,9 @@ export async function reviewDiff(options: ReviewDiffOptions): Promise<ReviewResu
       maxChunkTokens: options.maxChunkTokens,
       maxChunks: options.maxChunks,
       reviewConcurrency: options.reviewConcurrency,
+      maxCostUsd: options.maxCostUsd,
+      modelPrices: options.modelPrices,
+      estimateModelId: resolveEstimateModel(options.ai, options.thorough),
       verify: options.verify,
       task: options.thorough ? 'deep' : 'review',
     });
@@ -195,6 +213,9 @@ export async function reviewPullRequest(options: ReviewPullRequestOptions): Prom
         maxChunkTokens: options.maxChunkTokens,
         maxChunks: options.maxChunks,
         reviewConcurrency: options.reviewConcurrency,
+        maxCostUsd: options.maxCostUsd,
+        modelPrices: options.modelPrices,
+        estimateModelId: resolveEstimateModel(options.ai, options.thorough),
         verify: options.verify,
         task: options.thorough ? 'deep' : 'review',
       }

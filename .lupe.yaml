@@ -1,0 +1,10 @@
+# lupe reviewing lupe. See apps/action/README.md for the full config surface.
+profile: chill
+provider: anthropic
+
+# The ncc-built Action bundle is generated output, never hand-reviewed.
+path_filters:
+  - '!apps/action/dist/**'
+
+# Hard cost ceiling per PR (BYO-token). Over-budget runs fail before posting.
+max_cost_usd: 2

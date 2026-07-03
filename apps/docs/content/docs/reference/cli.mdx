@@ -1,0 +1,134 @@
+---
+title: CLI reference
+description: Complete reference for the lupe command-line interface, its commands, flags, and provider credentials.
+---
+
+The `lupe` CLI reviews a local diff or branch and prints findings to your terminal. It runs entirely on your own model tokens and never posts to GitHub — posting to pull requests is handled by the [GitHub Action](/docs/reference/github-action).
+
+## Invocation
+
+```bash
+lupe <command> [options]
+```
+
+The available commands are `review`, `explain`, `check`, `init`, and `learn`. Every command accepts `--cwd`/`-C` to point at a repository other than the current directory.
+
+<Callout type="info">The CLI is print-only. Use `review` to see findings locally; wire up the Action when you want inline comments on a pull request.</Callout>
+
+## Providers
+
+The `--provider` flag (and the `provider` key in `.lupe.yaml`) accepts eight values: six metered API providers plus two opt-in local backends. When no provider is given, lupe defaults to `anthropic`.
+
+| Provider | Kind | Notes |
+| --- | --- | --- |
+| `anthropic` | API | Claude models via the Anthropic API. |
+| `openai` | API | OpenAI models. |
+| `google` | API | Google Generative AI (Gemini) models. |
+| `bedrock` | API | Models via Amazon Bedrock. |
+| `openai-compatible` | API | Any OpenAI-compatible endpoint (set `baseURL` in config). |
+| `gateway` | API | Vercel AI Gateway. |
+| `claude-cli` | Local | Spawns your own authenticated `claude` CLI. |
+| `codex-cli` | Local | Spawns your own authenticated `codex` CLI. |
+
+The local backends invoke a CLI you have already logged into and never read or forward a token. They are unmetered and always report `$0.0000` in cost accounting, so cost caps do not apply to them. See [providers and models](/docs/guides/providers-and-models) and [security and privacy](/docs/guides/security-and-privacy) for details.
+
+## review
+
+Review a local diff or branch and print findings.
+
+| Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--cwd` | `-C` | directory | current directory | Repository working directory. |
+| `--base` | | string | — | Base ref to diff against. |
+| `--head` | | string | `HEAD` | Head ref. |
+| `--provider` | | choice | from config, else `anthropic` | Model provider (overrides config). |
+| `--profile` | | `chill` \| `assertive` | from config | Review profile; `chill` reports only high-confidence, medium+ findings, `assertive` surfaces more lower-severity findings. |
+| `--format` | | `md` \| `sarif` \| `json` | `md` | Output format. |
+| `--max-files` | | integer | from config | Maximum number of changed files to review. |
+| `--max-findings` | | integer | from config | Cap on the number of findings emitted. |
+| `--max-cost-usd` | | float | from config | Hard USD ceiling; the run fails before or mid model calls if exceeded (metered providers only). |
+| `--thorough` | | boolean | `false` | Use the strongest model plus extra passes. |
+| `--no-verify` | | boolean | `false` | Skip the grounding verifier. |
+| `--print` | | boolean | `true` (default) | Print findings locally; posting to GitHub is via the Action. |
+
+```bash
+lupe review --base main --format md
+```
+
+<Callout type="warn">`--max-cost-usd` only bounds metered API providers. Local backends (`claude-cli`, `codex-cli`) are free, so cost caps are ignored for them. See [cost and budget](/docs/guides/cost-and-budget).</Callout>
+
+## explain
+
+Review just the changes to a single file. Takes a positional file path and reviews only that file's changes.
+
+| Argument / Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `<path>` | | string (positional) | required | Path of the file to review. |
+| `--cwd` | `-C` | directory | current directory | Repository working directory. |
+| `--provider` | | choice | from config, else `anthropic` | Model provider (overrides config). |
+| `--format` | | `md` \| `sarif` \| `json` | `md` | Output format. |
+
+```bash
+lupe explain src/server/actions.ts
+```
+
+## check
+
+Validate your config and provider credentials. It prints the resolved provider, the resolved profile (defaulting to `chill`), any configured model overrides, and — for metered providers — whether the expected API key environment variable is `set` or `missing`. For local backends it prints a Terms-of-Service reminder instead of a key check.
+
+| Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--cwd` | `-C` | directory | current directory | Repository working directory. |
+| `--provider` | | choice | from config, else `anthropic` | Model provider (overrides config). |
+
+```bash
+lupe check
+```
+
+## init
+
+Scaffold a `.lupe.yaml` config interactively. It prompts for a provider and a review profile, then writes a `.lupe.yaml` in the working directory with sensible starter defaults (including `path_filters` that skip build output and lock files, and a `max_findings` cap). If the chosen provider needs an API key, it reminds you to export it.
+
+| Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--cwd` | `-C` | directory | current directory | Repository working directory. |
+
+```bash
+lupe init
+```
+
+See [configuration](/docs/guides/configuration) for the full list of keys you can edit afterward.
+
+## learn
+
+Teach lupe to stop reporting a recurring false positive. Takes a positional pattern and appends it to a suppression list in `.lupe/learnings.json`. Stored patterns are fed to both the review prompt and the filter chain, so matching findings are suppressed on future runs.
+
+| Argument / Flag | Alias | Type | Default | Description |
+| --- | --- | --- | --- | --- |
+| `<pattern>` | | string (positional) | required | Pattern describing the false positive to suppress. |
+| `--cwd` | `-C` | directory | current directory | Repository working directory. |
+
+```bash
+lupe learn "TODO comments are intentional"
+```
+
+## Provider environment variables
+
+Metered API providers read their credentials from the environment. Local backends use your existing CLI login and need no key.
+
+| Provider | Environment variable |
+| --- | --- |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `openai-compatible` | `OPENAI_API_KEY` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `gateway` | `AI_GATEWAY_API_KEY` |
+| `bedrock` | Standard AWS credentials (`AWS_ACCESS_KEY_ID`, and the rest of your AWS environment) |
+| `claude-cli` | none — uses your local `claude` login |
+| `codex-cli` | none — uses your local `codex` login |
+
+<Callout type="warn">If you select `claude-cli` while `ANTHROPIC_API_KEY` is set (or `codex-cli` while `OPENAI_API_KEY` is set), lupe warns that the key may override your subscription login. Unset it to use the subscription.</Callout>
+
+## Exit codes and errors
+
+A successful run exits `0`. On a configuration, provider, credential, cost-limit, rate-limit, model-refusal, output, or diff-parse error, lupe prints a single-line error and exits non-zero. See [troubleshooting](/docs/reference/troubleshooting) for how to resolve each case.

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 
-import { canonicalRuleId, Finding, findingsJsonSchema, isAdvisory, severityToSarifLevel } from './finding';
+import {
+  canonicalRuleId,
+  Finding,
+  findingContentKey,
+  findingsJsonSchema,
+  isAdvisory,
+  severityToSarifLevel,
+} from './finding';
 
 describe('finding model', () => {
   test('parses with defaults (side=RIGHT, evidence=[])', () => {
@@ -53,6 +60,14 @@ describe('finding model', () => {
   test('canonicalRuleId normalises free-form ids', () => {
     expect(canonicalRuleId('security', 'lupe/security/x')).toBe('lupe/security/x');
     expect(canonicalRuleId('performance', 'N+1 Query')).toBe('lupe/performance/n-1-query');
+  });
+
+  test('findingContentKey is stable for the same location+rule and differs otherwise', () => {
+    const base = { path: 'a.ts', startLine: 3, endLine: 5, side: 'RIGHT' as const, ruleId: 'lupe/x/y' };
+    // Reconstructable from a digest (no message), so it survives across runs.
+    expect(findingContentKey(base)).toBe(findingContentKey({ ...base }));
+    expect(findingContentKey(base)).not.toBe(findingContentKey({ ...base, startLine: 4 }));
+    expect(findingContentKey(base)).not.toBe(findingContentKey({ ...base, ruleId: 'lupe/x/z' }));
   });
 
   test('findingsJsonSchema produces a JSON Schema object', () => {

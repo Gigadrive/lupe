@@ -1,0 +1,72 @@
+---
+title: 'Large PRs: chunking & incremental review'
+description: How lupe reviews oversized diffs in token-bounded passes and re-reviews only new commits on later pushes.
+---
+
+Big pull requests break naive AI review in two ways: the diff no longer fits in a single model call, and every new push re-reviews the whole thing from scratch. lupe handles both. Large diffs are split into token-bounded passes and merged back together, and on later pushes only the new commits are reviewed.
+
+## Chunked (map-reduce) review
+
+When a diff is too large for one model call, lupe splits it into token-bounded **chunks**, reviews each chunk independently, and merges the candidate findings before the grounding verifier and filter chain run. Nothing is silently truncated.
+
+How it works:
+
+- Changed files are relevance-ranked, then greedily bin-packed into chunks that stay under `maxChunkTokens` of serialised diff (roughly 4 characters per token). The highest-ranked files land in the earliest chunks.
+- The number of chunks is capped by `maxChunks`. Files that don't fit within that ceiling are **surfaced, not dropped** (see [Overflow and oversized files](#overflow-and-oversized-files)).
+- The first chunk is reviewed on its own to prime the prompt cache; the remaining chunks then fan out with bounded concurrency (`reviewConcurrency`). Because every chunk shares the same frozen system prompt, chunks 2..N read the warm cache the first chunk primed, which keeps cost down.
+- A single file whose own diff is larger than one pass becomes its own chunk — it's reviewed in isolation, never skipped.
+
+When a diff is reviewed in more than one pass, the sticky summary comment notes it (for example, `Large diff — reviewed in 3 passes.`).
+
+## Configuration
+
+These knobs live in [`.lupe.yaml`](/docs/guides/configuration) (both camelCase and snake_case keys are accepted):
+
+```yaml
+# .lupe.yaml
+maxChunkTokens: 120000   # serialised-diff tokens per review pass
+maxChunks: 8             # hard ceiling on the number of passes
+reviewConcurrency: 3     # how many passes run concurrently
+```
+
+| Key | Default | What it controls |
+| --- | --- | --- |
+| `maxChunkTokens` | `120000` | Maximum serialised-diff tokens packed into one review pass. Lower it for smaller, cheaper passes; raise it to fit more per call. |
+| `maxChunks` | `8` | Hard ceiling on the number of passes for one PR — a cost bound. Files beyond it are reported, never silently dropped. |
+| `reviewConcurrency` | `3` | How many passes run at once. Higher finishes faster but sends more concurrent requests to your provider. |
+
+In the GitHub Action the same settings are available as the `max-chunk-tokens`, `max-chunks`, and `review-concurrency` inputs, which override any value in a committed `.lupe.yaml`.
+
+<Callout type="info">In the CLI, these three knobs are read from `.lupe.yaml` only — there are no equivalent command-line flags.</Callout>
+
+## Overflow and oversized files
+
+lupe never drops changed files quietly for being too big:
+
+- **Overflow** — files that couldn't be reviewed because the `maxChunks` ceiling was reached are listed explicitly. The sticky summary calls them out with a warning, and the GitHub Action reports the count through its `skipped` output. If you see this, raise `maxChunks`, narrow the diff with `pathFilters`, or split the PR.
+- **Oversized files** — files whose own diff is individually larger than one pass are reviewed in isolation and flagged in the summary, so you know they were handled specially rather than merged with their neighbours.
+
+## How chunking interacts with cost
+
+Each chunk is a separate model call, so more chunks means more cost. Two things keep this predictable:
+
+- **Prompt caching.** Every chunk reuses the same frozen system prompt, so passes after the first read the warm cache instead of paying full input price for the shared prefix.
+- **The cost cap.** If you set `maxCostUsd`, lupe estimates the run before any model call and fails if the estimate exceeds the cap. After the first (priming) chunk, it measures the real cost and, if the remaining chunks would push the run over budget, aborts before fanning them out. If the model's price is unknown it fails closed rather than risk an unbounded bill — set `modelPrices` for BYO endpoints.
+
+See [cost & budget](/docs/guides/cost-and-budget) for the full picture on pricing and caps.
+
+## Incremental re-review
+
+On a pull request, lupe stores the last-reviewed commit SHA inside its sticky summary comment. When you push again, it doesn't start over.
+
+- On a new push, lupe reviews only the commits added since the last-reviewed SHA (using the GitHub compare API), rather than the entire PR diff again.
+- Findings that still stand on files you didn't touch this time are **carried forward** into the sticky summary, so it stays cumulative instead of reflecting only the latest slice. Those carried-forward findings appear in the summary but aren't re-anchored as new inline comments.
+- lupe de-duplicates across runs: an inline comment it already posted is never posted a second time, even if the same finding resurfaces.
+
+The first review of a PR always covers the full diff — there's no prior SHA to compare against yet.
+
+### Force-push and rebase fallback
+
+Incremental review only trusts the compare when the new head is a clean fast-forward of the last-reviewed commit. If you rebase or force-push (a non-fast-forward push), or if the changed set is too large for the compare API to return, lupe falls back to a **full re-review** of the whole diff. Cross-run de-duplication still applies, so a full-diff fallback won't spam you with repeats of comments it already left.
+
+<Callout type="info">Incremental re-review is a pull-request feature — it relies on the sticky summary comment to remember the last-reviewed commit. Local CLI runs against a working tree review the diff you give them each time.</Callout>

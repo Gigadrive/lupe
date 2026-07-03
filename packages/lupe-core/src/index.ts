@@ -17,6 +17,7 @@ export * from './ports';
 export * from './ai/model';
 export * from './ai/provider';
 export * from './ai/pricing';
+export * from './ai/estimate';
 export * from './ai/usage';
 export * from './ai/tools';
 export * from './ai/ai-sdk-layer';
@@ -26,6 +27,7 @@ export * from './review/prompt';
 export * from './review/engine';
 export * from './review/verify';
 export * from './review/filter';
+export * from './review/incremental';
 export * from './review/pipeline';
 
 // Renderers

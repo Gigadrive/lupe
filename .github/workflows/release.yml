@@ -35,6 +35,9 @@ jobs:
       # bundle: an immutable vX.Y.Z plus a moving vN major alias. Guarded so it only runs once
       # per version (release.yml fires on every push to main).
       - name: Tag built Action bundle on version bump
+        # Runs even if `changeset publish` (npm) failed — tagging the Action is a
+        # standalone git operation and must not depend on npm auth being set up.
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           V="$(node -p "require('./apps/action/package.json').version")"

@@ -1,3 +1,4 @@
+import type { ModelPrice, ModelPriceOverrides } from './ai/pricing';
 import type { Category, Severity } from './finding';
 import { Severity as SeveritySchema } from './finding';
 import type { CategoryThreshold, PathThreshold } from './review/filter';
@@ -35,6 +36,10 @@ export interface LupeConfig {
   readonly maxChunkTokens?: number;
   readonly maxChunks?: number;
   readonly reviewConcurrency?: number;
+  /** Hard USD ceiling for one review run; over-budget runs fail before/mid model calls. */
+  readonly maxCostUsd?: number;
+  /** Per-model price overrides (keyed by exact model id) for accurate cost on BYO endpoints. */
+  readonly modelPrices?: ModelPriceOverrides;
 }
 
 type RawConfig = Record<string, unknown>;
@@ -102,6 +107,24 @@ function pickCategoryThresholds(raw: unknown): Partial<Record<Category, Category
   return any ? out : undefined;
 }
 
+/** Read a per-model price override; cache rows default to the 5-min ephemeral ratios of `input`. */
+function pickModelPrices(raw: unknown): ModelPriceOverrides | undefined {
+  if (!isRecord(raw)) return undefined;
+  const out: Record<string, ModelPrice> = {};
+  let any = false;
+  for (const [model, value] of Object.entries(raw)) {
+    if (!isRecord(value)) continue;
+    const input = pickNumber(value['input']);
+    const output = pickNumber(value['output']);
+    if (input === undefined || output === undefined) continue;
+    const cacheRead = pickNumber(value['cacheRead'] ?? value['cache_read']) ?? input * 0.1;
+    const cacheWrite = pickNumber(value['cacheWrite'] ?? value['cache_write']) ?? input * 1.25;
+    out[model] = { input, output, cacheRead, cacheWrite };
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
 function pickPathThresholds(raw: unknown): PathThreshold[] | undefined {
   const arr = pickArray<unknown>(raw);
   if (!arr) return undefined;
@@ -143,5 +166,7 @@ export function normalizeConfig(raw: RawConfig): LupeConfig {
     maxChunkTokens: pickNumber(get('maxChunkTokens', 'max_chunk_tokens')),
     maxChunks: pickNumber(get('maxChunks', 'max_chunks')),
     reviewConcurrency: pickNumber(get('reviewConcurrency', 'review_concurrency')),
+    maxCostUsd: pickNumber(get('maxCostUsd', 'max_cost_usd')),
+    modelPrices: pickModelPrices(get('modelPrices', 'model_prices')),
   };
 }

@@ -16,6 +16,10 @@
     "**/node_modules/**",
     "**/.turbo/**",
     "**/.git/**",
-    "**/CHANGELOG.md"
+    "**/CHANGELOG.md",
+    "**/.next/**",
+    "**/.source/**",
+    "**/next-env.d.ts",
+    "**/*.mdx"
   ]
 }

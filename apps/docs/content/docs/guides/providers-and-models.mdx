@@ -1,0 +1,105 @@
+---
+title: Providers & models
+description: Choose an AI provider, supply its credential, and map each review task to a model.
+---
+
+lupe is bring-your-own-token and provider-agnostic. You pick a provider, supply its credential through the environment, and — for everything except Anthropic — map each review task to a model. Because the engine asks for a *task* rather than a hard-coded model id, swapping model or provider is a one-line config change.
+
+## API providers
+
+lupe can resolve models directly from six API providers. Each expects its credential in the environment; lupe reads the conventional variable and never asks you to paste a key into config.
+
+| Provider | Config value | Required credential | Notes |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | The recommended default; ships built-in model routing. |
+| OpenAI | `openai` | `OPENAI_API_KEY` | |
+| Google | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | |
+| Amazon Bedrock | `bedrock` | ambient AWS credentials | Uses your ambient `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION`. |
+| OpenAI-compatible | `openai-compatible` | `OPENAI_API_KEY` | Requires a `baseURL` (see below). |
+| Vercel AI Gateway | `gateway` | `AI_GATEWAY_API_KEY` | Read from the environment. |
+
+<Callout type="info">Bedrock and the Gateway use ambient credentials — lupe does not wire a key for them, it lets the underlying provider read the standard environment variable. Set your provider once, either with `--provider` or the `provider` key in your config.</Callout>
+
+## Semantic tasks
+
+The review engine never hard-codes a model. Instead it requests one of four *tasks*, and you decide which model answers each. That indirection is what makes provider swaps trivial.
+
+| Task | When it runs | Purpose |
+| --- | --- | --- |
+| `triage` | Cheap pre-pass | A fast, inexpensive first look to sort what deserves deeper attention. |
+| `review` | Default pass | The main review that produces candidate findings. |
+| `verify` | Grounding check | Re-reads the evidence to confirm a finding is real before it is published. |
+| `deep` | `--thorough` | The strongest pass, used when you ask for a more exhaustive review. |
+
+## Default routing
+
+Only Anthropic ships built-in defaults. If you select Anthropic and set nothing else, each task routes to a sensible model automatically:
+
+| Task | Default model |
+| --- | --- |
+| `triage` | `claude-haiku-4-5` |
+| `review` | `claude-opus-4-8` |
+| `verify` | `claude-sonnet-4-6` |
+| `deep` | `claude-fable-5` |
+
+Every other provider has **no** defaults. If you choose `openai`, `google`, `bedrock`, `openai-compatible`, or `gateway`, you must map each task you use to a model under `models`, or the run fails with an error telling you which task is unmapped.
+
+```yaml
+# .lupe.yaml
+provider: openai
+models:
+  triage: gpt-5-mini
+  review: gpt-5
+  verify: gpt-5
+  deep: gpt-5
+```
+
+You can also override individual tasks on Anthropic while letting the rest fall back to the defaults:
+
+```yaml
+# .lupe.yaml
+provider: anthropic
+models:
+  review: claude-fable-5
+```
+
+## Custom endpoints with baseURL
+
+The `openai-compatible` provider **requires** a `baseURL` pointing at your endpoint. Use it for self-hosted or third-party gateways that speak the OpenAI API. You can also set `baseURL` for the `gateway` provider to point at a custom gateway host.
+
+```yaml
+# .lupe.yaml
+provider: openai-compatible
+baseURL: https://my-inference-host.example.com/v1
+models:
+  triage: my-small-model
+  review: my-large-model
+  verify: my-large-model
+  deep: my-large-model
+```
+
+<Callout type="info">Pricing for non-Anthropic and custom models is approximate. Supply exact per-model rates with `modelPrices` so cost estimates and budget caps stay accurate — see the [cost & budget guide](/docs/guides/cost-and-budget).</Callout>
+
+## Local, token-free backends
+
+The CLI also offers two local backends that run on your own subscription instead of an API key: `claude-cli` and `codex-cli`. They spawn your already-authenticated official binary (`claude` or `codex`), so lupe never reads, stores, or forwards any token. They are strictly opt-in — select them with `--provider claude-cli` or `--provider codex-cli`.
+
+Because these backends run on your subscription rather than metered API calls, they are unmetered and always report a `$0.0000` cost. Cost caps do not apply to them.
+
+On first selection each backend prints a one-time notice, and warns if a conflicting API-key variable (`ANTHROPIC_API_KEY` for `claude-cli`, `OPENAI_API_KEY` for `codex-cli`) is set that might override your subscription login.
+
+When you pass `--thorough` to a local backend, lupe runs three sequential focus-lens passes and unions the results:
+
+1. Security, authorization & privacy
+2. Correctness, edge cases & error handling
+3. Performance, resource & data integrity
+
+Passes run one after another so thorough mode does not multiply the in-flight subprocess load, and a single failed pass is tolerated rather than fatal.
+
+<Callout type="warn">Local backends are unofficial: reusing a subscription login this way is a Terms-of-Service gray area with no published carve-out, so it may violate the provider's terms. Prefer API keys for shared or CI use. See [security & privacy](/docs/guides/security-and-privacy) for details.</Callout>
+
+## See also
+
+- [Configuration](/docs/guides/configuration) — the full `.lupe.yaml` reference.
+- [Cost & budget](/docs/guides/cost-and-budget) — pricing overrides and spend caps.
+- [Security & privacy](/docs/guides/security-and-privacy) — how credentials are handled.

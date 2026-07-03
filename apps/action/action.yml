@@ -48,9 +48,15 @@ inputs:
   review-concurrency:
     description: 'How many large-PR review passes to run concurrently.'
     default: ''
+  max-cost-usd:
+    description: 'Hard USD ceiling for a review. Over-budget runs fail before/mid the model calls rather than posting.'
+    default: ''
   skip-draft:
     description: 'Skip draft pull requests.'
     default: 'true'
+  allow-untrusted-checkout:
+    description: 'Opt in to running on pull_request_target. Only set true if the job does NOT check out untrusted PR code; the review runs tool-less regardless.'
+    default: 'false'
   fail-on-severity:
     description: 'Fail the job if any finding is at/above this severity: none | critical | high | medium | low'
     default: 'none'

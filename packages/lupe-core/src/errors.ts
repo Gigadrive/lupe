@@ -53,6 +53,18 @@ export class ConfigError extends Data.TaggedError('ConfigError')<{
   readonly cause?: unknown;
 }> {}
 
+/**
+ * A review run's estimated or actual cost exceeded the configured `maxCostUsd`
+ * cap — or the cap could not be enforced because the model has no known price
+ * (fail-closed). Thrown before/mid the model calls so spend is bounded.
+ */
+export class CostLimitError extends Data.TaggedError('CostLimitError')<{
+  readonly message: string;
+  readonly limitUsd: number;
+  readonly estimatedUsd?: number;
+  readonly spentUsd?: number;
+}> {}
+
 /** GitHub transport failure. */
 export class GitHubError extends Data.TaggedError('GitHubError')<{
   readonly message: string;
@@ -77,5 +89,6 @@ export type LupeError =
   | AnchorError
   | ReviewOutputError
   | ConfigError
+  | CostLimitError
   | GitHubError
   | SubprocessError;

@@ -1,0 +1,92 @@
+---
+title: GitHub Action reference
+description: Complete inputs, outputs, secrets, and versioning for the lupe GitHub Action.
+---
+
+The lupe GitHub Action runs an AI code review on your pull requests using your own model token. It reads the PR diff from the GitHub API, posts a single batched review with inline comments, and maintains one sticky summary comment for incremental re-reviews.
+
+For a step-by-step setup, see the [GitHub Action getting-started guide](/docs/getting-started/github-action).
+
+## Usage
+
+```yaml
+# .github/workflows/lupe.yml
+name: lupe
+on:
+  pull_request:
+
+permissions:
+  contents: read # read the repo
+  pull-requests: write # post the review + summary
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gigadrive/lupe/apps/action@v0 # moving major alias; or pin an immutable @v0.1.0
+        with:
+          provider: anthropic
+          profile: chill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The checkout needs no special `fetch-depth`: lupe reads the diff from the GitHub API, and incremental re-reviews key off the last-reviewed SHA stored in the sticky summary comment rather than local git history.
+
+<Callout type="warn">Trigger on `pull_request`, not `pull_request_target`. Running with a writable token against an untrusted fork checkout is a documented RCE / secret-exfiltration vector — see [security and privacy](/docs/guides/security-and-privacy).</Callout>
+
+## Inputs
+
+Most inputs default to empty, which means "fall back to your `.lupe.yaml` (or the built-in default)". When set, an input overrides the corresponding config key. See [configuration](/docs/guides/configuration) for the file-based equivalents.
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `github-token` | `${{ github.token }}` | Token used to read the PR and post review comments. |
+| `provider` | _(empty → `anthropic`)_ | Model provider: `anthropic` \| `openai` \| `google` \| `bedrock` \| `openai-compatible` \| `gateway`. Overrides `.lupe.yaml`; falls back to `anthropic`. |
+| `models` | _(empty)_ | JSON map of task→model id, e.g. `{"review":"claude-opus-4-8"}`. Overrides `.lupe.yaml`. |
+| `profile` | _(empty → `chill`)_ | Review profile: `chill` \| `assertive`. Overrides `.lupe.yaml`; defaults to `chill`. |
+| `base-url` | _(empty)_ | Custom base URL (for `openai-compatible` / `gateway`). |
+| `max-files` | _(empty)_ | Maximum number of changed files to review. |
+| `max-findings` | _(empty)_ | Maximum number of findings to keep. |
+| `confidence-threshold` | _(empty)_ | Global confidence floor (0..1) for keeping a finding. Overrides `.lupe.yaml`. |
+| `suppress-advisory` | _(empty)_ | Drop advisory (style/docs/test/maintainability) findings entirely: `true` \| `false`. |
+| `min-severity-to-comment` | _(empty)_ | Only post inline comments for findings at/above this severity (rest stay in the summary): `critical` \| `high` \| `medium` \| `low` \| `info`. |
+| `thorough` | `false` | Use the strongest model and extra passes. |
+| `max-chunk-tokens` | _(empty)_ | Max serialised-diff tokens per review pass (large-PR map-reduce). |
+| `max-chunks` | _(empty)_ | Hard ceiling on review passes for a large PR. Overflow is reported, not silently dropped. |
+| `review-concurrency` | _(empty)_ | How many large-PR review passes to run concurrently. |
+| `max-cost-usd` | _(empty)_ | Hard USD ceiling for a review. Over-budget runs fail before/mid the model calls rather than posting. |
+| `skip-draft` | `true` | Skip draft pull requests. |
+| `allow-untrusted-checkout` | `false` | Opt in to running on `pull_request_target`. Only set `true` if the job does NOT check out untrusted PR code; the review runs tool-less regardless. |
+| `fail-on-severity` | `none` | Fail the job if any finding is at/above this severity: `none` \| `critical` \| `high` \| `medium` \| `low`. |
+
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `findings` | Number of findings posted. |
+| `cost-usd` | Approximate USD cost of the review. |
+| `skipped` | Number of changed files left unreviewed because the chunk ceiling was reached. |
+
+## Required secrets
+
+The only required secret is your **provider key**. GitHub access uses the built-in `GITHUB_TOKEN` (wired through `github-token`), so you do not need to create a personal access token.
+
+| Provider | Secret / env var |
+| --- | --- |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `gateway` | `AI_GATEWAY_API_KEY` |
+
+Pass the key through the step's `env`, as shown in the usage snippet. See [providers and models](/docs/guides/providers-and-models) for the full provider list and how to select models.
+
+## Versioning
+
+Reference the action as `gigadrive/lupe/apps/action` at one of two kinds of ref:
+
+- `@v0` — a moving major alias that always points at the latest `0.x` release. While lupe is pre-1.0 the alias is `@v0` (there is no `@v1` yet).
+- `@v0.1.0` — an immutable version tag, for reproducible pins.
+
+The built bundle is attached to release tags, not committed to `main`: the release workflow builds the bundle and tags it as the immutable `vX.Y.Z` plus the moving `vN` alias. Because GitHub runs the action from the referenced git ref, consumers need no build step — and `main` stays free of build output. Do not reference `@main`.

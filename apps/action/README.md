@@ -19,9 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # full history helps incremental re-reviews
-      - uses: gigadrive/lupe/apps/action@v1
+      - uses: gigadrive/lupe/apps/action@v0.1.0 # pin immutable; or the moving @v0 major alias
         with:
           provider: anthropic
           profile: chill
@@ -35,8 +33,11 @@ access uses the built-in `GITHUB_TOKEN`.
 
 > **Versioning.** The `@vN` ref points at a release tag whose tree contains the
 > built bundle — the bundle is built and tagged by the release workflow, not
-> committed to `main`. Pin to a moving major (`@v1`) or an immutable
-> `@vX.Y.Z`. While the action is pre-1.0 the major alias is `@v0`.
+> committed to `main`. Pin to a moving major (`@v0`) or an immutable
+> `@vX.Y.Z`. While the action is pre-1.0 the major alias is `@v0` (there is no
+> `@v1` yet). The checkout needs no special `fetch-depth`: lupe reads the diff
+> from the GitHub API, and incremental re-reviews key off the last-reviewed SHA
+> stored in the sticky summary comment — not local git history.
 
 ## Inputs
 

@@ -1,0 +1,78 @@
+---
+title: GitHub Action quickstart
+description: Review every pull request automatically with the lupe GitHub Action, using your own model token.
+---
+
+The GitHub Action is the fastest way to get lupe reviewing every pull request. Add one workflow file and one secret, and lupe posts an AI code review on each PR — running on your own provider token, with no hosted service in between.
+
+## Minimal workflow
+
+Create `.github/workflows/lupe.yml`:
+
+```yaml
+name: lupe
+on:
+  pull_request:
+
+permissions:
+  contents: read # read the repo
+  pull-requests: write # post the review + summary
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gigadrive/lupe/apps/action@v0
+        with:
+          provider: anthropic
+          profile: chill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+That is a complete, working setup. The `permissions` block is required: lupe needs `contents: read` to read the repository and `pull-requests: write` to post the review and its summary comment.
+
+## Add your provider key
+
+The only secret you need is your model provider key. Add it as a repository or organization secret (Settings → Secrets and variables → Actions), then reference it under `env`.
+
+GitHub access uses the built-in `GITHUB_TOKEN` — you do not create or store a separate GitHub token.
+
+Each provider reads its own environment variable:
+
+| Provider | Secret / env var |
+| --- | --- |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `gateway` | `AI_GATEWAY_API_KEY` |
+
+See [providers and models](/docs/guides/providers-and-models) for the full list, including `bedrock` and `openai-compatible`.
+
+## Pin the version
+
+The `@vN` reference points at a release tag whose tree contains the built Action bundle. The bundle is built and tagged by the release workflow — it is not committed to the default branch — so your workflow needs no build step and no `npm install`.
+
+- Pin the moving major alias `@v0` to pick up patch and minor releases automatically. (While lupe is pre-1.0 the major alias is `@v0`; there is no `@v1` yet.)
+- Pin an immutable `@vX.Y.Z` (for example `@v0.1.0`) to lock a specific release.
+
+## No special checkout needed
+
+lupe reads the diff from the GitHub API, and incremental re-reviews key off the last-reviewed commit stored in the summary comment — not local git history. You do not need to configure `fetch-depth` or any special checkout; a plain `actions/checkout` is fine, and lupe does not depend on it for the diff.
+
+<Callout type="warn">
+Trigger on `pull_request`, never on `pull_request_target` with an untrusted fork checkout — running with a writable token against untrusted PR code is a known secret-exfiltration and RCE vector. See [security and privacy](/docs/guides/security-and-privacy).
+</Callout>
+
+## What happens on a run
+
+On the first run for a pull request, lupe posts one batched review with inline comments anchored to the changed lines, plus a single sticky summary comment.
+
+On subsequent pushes to the same PR, lupe re-reviews incrementally from the last-reviewed commit recorded in that summary comment, so it only looks at what changed since the previous review instead of re-scanning the whole diff.
+
+## Next steps
+
+- [GitHub Action reference](/docs/reference/github-action) — every input and output.
+- [Providers and models](/docs/guides/providers-and-models) — use OpenAI, Google, Bedrock, and others.
+- [Configuration](/docs/guides/configuration) — tune behavior with a `.lupe.yaml` file in your repo.

@@ -15,5 +15,13 @@
     "@typescript-eslint/ban-ts-comment": "error",
     "@typescript-eslint/no-non-null-assertion": "warn"
   },
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "apps/action/dist/**", "**/.turbo/**"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "apps/action/dist/**",
+    "**/.turbo/**",
+    "**/.next/**",
+    "**/.source/**",
+    "**/next-env.d.ts"
+  ]
 }

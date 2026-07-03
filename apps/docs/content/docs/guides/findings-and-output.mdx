@@ -1,0 +1,100 @@
+---
+title: Findings & output
+description: The shape of a lupe finding and every place it can be published — inline comments, a sticky summary, terminal output, JSON, and SARIF.
+---
+
+Every issue lupe reports is a **finding**: a single, self-contained object with a location, a severity, a message, and (optionally) a code suggestion. The same finding drives every output surface — an inline pull-request comment, the sticky summary, terminal text, JSON, and SARIF — so once you understand the shape, you understand every format lupe can emit.
+
+## Anatomy of a finding
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `ruleId` | string | Stable taxonomy id, conventionally `lupe/<category>/<slug>`. Lower-case, kebab/slash only. |
+| `title` | string | Short headline (up to 160 characters). |
+| `path` | string | Repository-relative path to the file. |
+| `startLine` / `endLine` | integer | 1-based line range the finding anchors to. |
+| `side` | `LEFT` \| `RIGHT` | Which side of the diff to anchor on. `RIGHT` = head (additions), `LEFT` = base (deletions). Defaults to `RIGHT`. |
+| `severity` | enum | One of `critical`, `high`, `medium`, `low`, `info`. |
+| `category` | enum | Coarse taxonomy (see below). |
+| `message` | markdown | The body of the comment. |
+| `suggestion` | string (optional) | Replacement code for the anchored range, rendered as a GitHub ` ```suggestion ` block you can commit with one click. |
+| `confidence` | number `0..1` | How sure the reviewer is. Low-confidence findings can be filtered out before they are published. |
+| `evidence` | list (optional) | Cited code that grounds the finding: `{ path, startLine, endLine, snippet?, note? }`. |
+
+<Callout type="info">
+Findings that cite code the reviewer can't tie back to the real diff are dropped before publication, so an evidence-backed finding is a grounded one.
+</Callout>
+
+### Severity
+
+Findings carry one of five severities, from most to least urgent:
+
+`critical` · `high` · `medium` · `low` · `info`
+
+Severity drives sorting, the summary's severity table, and the two transport controls described below.
+
+### Category
+
+The category is a coarse taxonomy used for routing and for stable rule ids:
+
+`correctness` · `security` · `performance` · `concurrency` · `error-handling` · `resource-leak` · `api-misuse` · `data-loss` · `maintainability` · `style` · `test` · `docs`
+
+Four categories are **advisory by default** — they are surfaced but never block CI: `style`, `maintainability`, `docs`, and `test`. The summary counts findings as either *actionable* or *advisory* on this basis.
+
+## Where findings show up
+
+**In a GitHub Action run**, each finding becomes:
+
+- An **inline review comment** anchored to its `path` and line range, including the severity badge, category, message, any ` ```suggestion ` block, and a confidence percentage.
+- A row in the single **sticky summary comment**, which lupe updates in place on every run. The summary carries a finding count (actionable vs. advisory), a per-severity table, a collapsible list of every finding, and — when relevant — a cost line and notices about files skipped for size.
+
+See the [GitHub Action reference](/docs/reference/github-action) for the full inputs and outputs.
+
+**From the CLI**, `lupe review` prints findings to your terminal by default and can emit machine-readable formats via `--format`:
+
+| `--format` | Output |
+| --- | --- |
+| `md` | Human-readable markdown (the default). |
+| `json` | The raw findings array. |
+| `sarif` | A SARIF 2.1.0 log (see below). |
+
+```bash
+lupe review --format sarif > lupe.sarif
+```
+
+See the [CLI reference](/docs/reference/cli) for every flag.
+
+## SARIF output
+
+`--format sarif` produces a valid **SARIF 2.1.0** log, the interchange format GitHub code scanning and most IDEs understand. Each finding becomes a SARIF result whose level maps from its severity:
+
+| Severity | SARIF level |
+| --- | --- |
+| `critical` | `error` |
+| `high` | `error` |
+| `medium` | `warning` |
+| `low` | `note` |
+| `info` | `note` |
+
+Every result also carries a stable `partialFingerprints` entry, so code scanning can deduplicate the same finding across runs instead of re-alerting on it.
+
+Upload the log to GitHub code scanning with the standard action:
+
+```yaml
+- run: lupe review --format sarif > lupe.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: lupe.sarif
+```
+
+## Two transport controls
+
+By default every published finding becomes an inline comment and nothing fails your build. Two independent controls change that.
+
+**`minSeverityToComment`** (config, or the Action's `min-severity-to-comment` input) raises the bar for *inline* comments: only findings at or above this severity are posted inline, and everything below still appears in the sticky summary. Use it to keep the review conversation focused on the important stuff without losing the long tail. Set it in [configuration](/docs/guides/configuration).
+
+**`fail-on-severity`** (GitHub Action input) controls the job's exit status: the job fails when any finding is at or above the given level. It accepts `none | critical | high | medium | low` and defaults to `none`, so reviews are advisory until you opt into gating. See the [GitHub Action reference](/docs/reference/github-action).
+
+<Callout type="info">
+These two controls are orthogonal: `minSeverityToComment` decides what gets posted inline, while `fail-on-severity` decides whether the run passes or fails. You can comment on everything but fail on nothing, or the reverse.
+</Callout>

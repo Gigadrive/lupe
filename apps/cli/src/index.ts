@@ -13,10 +13,13 @@ import {
   ConfigError,
   RepoSource,
   renderSarif,
+  resolveTaskModelId,
   runReview,
+  type ApiProviderId,
   type ReviewProfile,
   type ReviewRunResult,
   type ReviewTarget,
+  type ReviewTask,
 } from '@gigadrive/lupe-core';
 import { RepoSourceLive, compressDiff, discoverCodingStandards } from '@gigadrive/lupe-git';
 
@@ -45,6 +48,7 @@ interface ReviewFlags {
   readonly format: 'md' | 'sarif' | 'json';
   readonly maxFiles?: number;
   readonly maxFindings?: number;
+  readonly maxCostUsd?: number;
   readonly thorough: boolean;
   readonly verify: boolean;
   readonly onlyPath?: string;
@@ -89,6 +93,21 @@ function runReviewFlow(flags: ReviewFlags) {
         return;
       }
       yield* Console.error(colors.gray(`Reviewing ${compressed.files.length} file(s) with ${provider}…`));
+      const task: ReviewTask = flags.thorough ? 'deep' : 'review';
+      // Cost caps only apply to metered API providers; local backends are free.
+      const local = isLocalProvider(provider);
+      const maxCostUsd = local ? undefined : (flags.maxCostUsd ?? fileConfig.maxCostUsd);
+      let estimateModelId: string | undefined;
+      if (!local) {
+        try {
+          estimateModelId = resolveTaskModelId(
+            { provider: provider as ApiProviderId, models: fileConfig.models },
+            task
+          );
+        } catch {
+          estimateModelId = undefined;
+        }
+      }
       const result = yield* runReview(compressed.files, target, {
         // Local single-shot backends (claude-cli/codex-cli) have no repo tools;
         // tell the prompt so it stays recall-biased instead of "confirm-or-stay-silent".
@@ -104,9 +123,12 @@ function runReviewFlow(flags: ReviewFlags) {
         maxChunkTokens: fileConfig.maxChunkTokens,
         maxChunks: fileConfig.maxChunks,
         reviewConcurrency: fileConfig.reviewConcurrency,
+        maxCostUsd,
+        modelPrices: fileConfig.modelPrices,
+        estimateModelId,
         learnings,
         verify: flags.verify,
-        task: flags.thorough ? 'deep' : 'review',
+        task,
       });
       if (result.chunkCount > 1) {
         yield* Console.error(colors.gray(`Reviewed in ${result.chunkCount} passes (large diff).`));
@@ -158,6 +180,10 @@ const reviewCommand = Command.make(
     format: formatOpt,
     maxFiles: Options.integer('max-files').pipe(Options.optional),
     maxFindings: Options.integer('max-findings').pipe(Options.optional),
+    maxCostUsd: Options.float('max-cost-usd').pipe(
+      Options.withDescription('Hard USD ceiling; the run fails before/mid model calls if exceeded'),
+      Options.optional
+    ),
     thorough: Options.boolean('thorough').pipe(Options.withDescription('Use the strongest model + extra passes')),
     noVerify: Options.boolean('no-verify').pipe(Options.withDescription('Skip the grounding verifier')),
     print: Options.boolean('print').pipe(
@@ -174,6 +200,7 @@ const reviewCommand = Command.make(
       format: a.format,
       maxFiles: opt(a.maxFiles),
       maxFindings: opt(a.maxFindings),
+      maxCostUsd: opt(a.maxCostUsd),
       thorough: a.thorough,
       verify: !a.noVerify,
     })
@@ -313,6 +340,7 @@ const reportAndExit = (message: string) =>
 run(process.argv).pipe(
   Effect.catchTags({
     ConfigError: (e) => reportAndExit(e.message),
+    CostLimitError: (e) => reportAndExit(e.message),
     ProviderError: (e) => reportAndExit(`${e.message}${e.provider ? ` (provider: ${e.provider})` : ''}`),
     RateLimitError: (e) => reportAndExit(`rate limited: ${e.message}`),
     RefusalError: (e) => reportAndExit(`model refused: ${e.message}`),

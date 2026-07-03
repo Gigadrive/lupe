@@ -147,3 +147,60 @@ describe('runReview large-PR chunking', () => {
     expect(result.summaryMarkdown).toContain('NOT reviewed');
   });
 });
+
+describe('runReview cost cap', () => {
+  test('fails pre-flight before any model call when the estimate exceeds the cap', async () => {
+    const { layer, systems } = capturingAi([finding()]);
+    const err = await Effect.runPromise(
+      runReview([FILE], undefined, { maxCostUsd: 1e-7, estimateModelId: 'claude-opus-4-8' }).pipe(
+        Effect.provide(layer),
+        Effect.flip
+      )
+    );
+    expect(err._tag).toBe('CostLimitError');
+    expect(systems).toHaveLength(0); // no generation call happened
+  });
+
+  test('fails closed pre-flight when the model has no known price', async () => {
+    const { layer, systems } = capturingAi([finding()]);
+    const err = await Effect.runPromise(
+      runReview([FILE], undefined, { maxCostUsd: 100, estimateModelId: 'mystery-model' }).pipe(
+        Effect.provide(layer),
+        Effect.flip
+      )
+    );
+    expect(err._tag).toBe('CostLimitError');
+    expect(systems).toHaveLength(0);
+  });
+
+  test('post-priming breaker aborts the fan-out when projected cost exceeds the cap', async () => {
+    const systems: string[] = [];
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 };
+    const service: AiModelService = {
+      generateFindings: (input) => {
+        systems.push(input.system);
+        return Effect.succeed({ findings: [finding()], usage, model: 'claude-haiku-4-5', steps: 1 });
+      },
+      verify: () => Effect.succeed({ grounded: true, reason: '', usage: EMPTY_USAGE, model: 'claude-haiku-4-5' }),
+    };
+    const layer = Layer.succeed(AiModel, service);
+    // haiku input = $1/M → first chunk ≈ $1; ×3 chunks ≈ $3 > cap $1.5. No estimateModelId → pre-flight skipped.
+    const err = await Effect.runPromise(
+      runReview([mkFile('a.ts'), mkFile('b.ts'), mkFile('c.ts')], undefined, {
+        maxCostUsd: 1.5,
+        maxChunkTokens: 1,
+      }).pipe(Effect.provide(layer), Effect.flip)
+    );
+    expect(err._tag).toBe('CostLimitError');
+    expect(systems).toHaveLength(1); // only the priming chunk ran; fan-out aborted
+  });
+
+  test('within-budget runs complete normally', async () => {
+    const result = await Effect.runPromise(
+      runReview([FILE], undefined, { maxCostUsd: 1000, estimateModelId: 'claude-opus-4-8' }).pipe(
+        Effect.provide(fakeAi([finding()]))
+      )
+    );
+    expect(result.findings).toHaveLength(1);
+  });
+});

@@ -1,0 +1,76 @@
+---
+title: Troubleshooting
+description: Understand lupe's error types and fix the most common review problems.
+---
+
+When a review fails, lupe reports one of a small set of typed errors and exits non-zero. Each error names the concern that failed and, where useful, carries extra fields (a provider, a model, a file path, a cost limit) in its message. Use the table below to map the error to a fix, then check the common issues that don't surface as a hard error.
+
+## Error types
+
+| Error | What it means | How to fix |
+| --- | --- | --- |
+| `ConfigError` | Your configuration is missing or invalid (for example a bad `.lupe.yaml`). | Fix the reported key in your config. See [configuration](/docs/guides/configuration). |
+| `CostLimitError` | The run's estimated or actual cost exceeded your `maxCostUsd` cap, or the cap could not be enforced because the model has no known price (lupe fails closed). The message includes the limit and the estimated/spent amount. | Raise `maxCostUsd`, narrow the diff, or add a `modelPrices` entry. See [cost and budget](/docs/guides/cost-and-budget). |
+| `ProviderError` | A provider/model call failed — network error, a 4xx/5xx, or a malformed response. The message names the provider and model when known. | Check credentials and connectivity for that provider. Run `lupe check`. See [providers and models](/docs/guides/providers-and-models). |
+| `RateLimitError` | The provider rate-limited the request. When the provider returns a retry hint, lupe backs off automatically. | Retry later, lower concurrency, or move to a provider/tier with more headroom. |
+| `RefusalError` | The model declined to answer (for example an Anthropic `refusal` stop reason). This triggers a fallback rather than a hard stop internally, but surfaces if no fallback succeeds. | Retry, or switch the model for the task. See [providers and models](/docs/guides/providers-and-models). |
+| `ReviewOutputError` | The model ran but structured findings could not be produced or validated. | Retry; if it persists, try a stronger model (for example `--thorough`) or a different provider. |
+| `DiffParseError` | lupe could not parse the unified diff it was given. | Confirm your base/head refs are valid and produce a real diff; regenerate the diff and retry. |
+| `AnchorError` | A finding could not be anchored to a valid `(line, side)` in the diff (posting it inline would 422 on GitHub). The message names the file path and the offending line/side. | No action needed — such findings are moved to the summary instead of being posted inline (the 422 guard). |
+| `GitHubError` | A GitHub transport call failed. The message includes the HTTP status when known. | Check the token's permissions and the repository/PR reference, then retry. |
+| `SubprocessError` | A local-credential backend (`claude-cli`/`codex-cli`) failed to run or produced output lupe could not parse. The message includes the command and exit code when known. | Confirm the binary is installed and you are logged in, then retry. |
+
+<Callout type="info">Findings are generated with a bias toward recall and then gated by the grounding verifier and filter chain. That means it is normal and expected for some generated findings to be dropped or moved before you see them.</Callout>
+
+## Common issues
+
+### Missing or invalid API key
+
+Run `lupe check` to validate your config and confirm the credential lupe expects for your provider. It prints the resolved provider and the exact environment variable, marking it `set` or `missing`:
+
+```bash
+lupe check
+```
+
+Set the variable for your provider before running a review:
+
+| Provider | Environment variable |
+| --- | --- |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai`, `openai-compatible` | `OPENAI_API_KEY` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `gateway` | `AI_GATEWAY_API_KEY` |
+| `bedrock` | `AWS_ACCESS_KEY_ID` (plus your standard AWS credentials) |
+
+Local backends (`claude-cli`, `codex-cli`) use your own logged-in binary and need no key. See [providers and models](/docs/guides/providers-and-models).
+
+### "unknown model price" / the cost cap can't be enforced
+
+lupe fails closed: if a cost cap is set but the model has no known price, it raises `CostLimitError` instead of running with an unbounded spend. Add the model's price to `modelPrices` in `.lupe.yaml` so lupe can estimate and enforce the cap. See [cost and budget](/docs/guides/cost-and-budget).
+
+### A finding didn't get an inline comment
+
+Two things move a finding out of the inline comments:
+
+- It could not be anchored to a changed line in the diff, so it was moved to the summary instead of being posted inline (the 422 guard).
+- It was filtered out — for example by `minSeverityToComment`, or by your confidence/category/path thresholds.
+
+Loosen `minSeverityToComment` or your thresholds if you want more inline comments. See [configuration](/docs/guides/configuration).
+
+### No comments at all
+
+This is usually one of:
+
+- The diff is empty or every changed file was excluded by your `path_filters`, so there was nothing to review.
+- Everything the model found was dropped by the verifier and filter chain.
+- The pull request is a draft. By default drafts are skipped (`skip-draft: true`); set it to `false` to review drafts.
+
+### The run cost was $0.0000
+
+You're on a local backend (`claude-cli` or `codex-cli`). These spawn your own authenticated binary and are unmetered, so lupe reports `$0.0000` by design — there is no per-token billing for lupe to account for. Cost caps also do not apply to local backends. See [cost and budget](/docs/guides/cost-and-budget).
+
+## See also
+
+- [Configuration](/docs/guides/configuration)
+- [Providers and models](/docs/guides/providers-and-models)
+- [Cost and budget](/docs/guides/cost-and-budget)

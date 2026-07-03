@@ -1,0 +1,83 @@
+---
+title: Cost & budget
+description: How lupe accounts token usage in USD, caps spend with maxCostUsd, and lets you correct pricing per model.
+---
+
+lupe runs on your own model tokens, so every review has a real dollar cost. To keep that cost visible and bounded, lupe tracks token usage per model, converts it to USD, prints the total in the review summary, and can fail a run outright if the projected spend exceeds a cap you set.
+
+## Cost in the summary footer
+
+After a review, lupe appends a small footer to the summary showing the usage and estimated cost for the run:
+
+```text
+💸 128,540 in · 3,102 out · 96,204 cached · ~$0.4187
+```
+
+That line reports input tokens, output tokens, cached (cache-read) tokens, and the total estimated cost in USD (four decimal places). Cost is computed per model from token usage, then summed across every model and chunk the run touched.
+
+<Callout type="info">Cost figures are estimates derived from a built-in pricing table. They are only as accurate as the prices lupe has for the model you use — see [pricing overrides](#correcting-prices-with-modelprices) below for anything outside the verified Anthropic rows.</Callout>
+
+## Built-in pricing table
+
+lupe ships a vendored pricing table in USD **per 1M tokens**. Model ids are matched by substring, so id variants (dates, suffixes) resolve to the right family. The Anthropic rows are verified against published pricing; every non-Anthropic row is a rough placeholder you should override per deployment.
+
+| Model family (match) | Input | Output | Cache read | Cache write | Status |
+| --- | --- | --- | --- | --- | --- |
+| `opus` | 5 | 25 | 0.5 | 6.25 | verified |
+| `sonnet` | 3 | 15 | 0.3 | 3.75 | verified |
+| `haiku` | 1 | 5 | 0.1 | 1.25 | verified |
+| `fable` / `mythos` | 10 | 50 | 1.0 | 12.5 | verified |
+| `gpt-5-mini` / `gpt-4o-mini` | 0.15 | 0.6 | 0.075 | 0.15 | placeholder |
+| `gpt-5` / `gpt-4.1` / `gpt-4o` | 2.5 | 10 | 1.25 | 2.5 | placeholder |
+| `gemini … flash` | 0.15 | 0.6 | 0.0375 | 0.15 | placeholder |
+| `gemini … pro` | 1.25 | 10 | 0.31 | 1.25 | placeholder |
+
+A model id that matches no row resolves to a zero price marked "unknown" — which the cost cap treats as a hard failure rather than as "free" (see below).
+
+## Prompt caching
+
+On Anthropic models, lupe reuses a frozen, cacheable system prefix across chunks of a large review. The first chunk writes that prefix to the cache (a cache-write); later chunks read it back (a cache-read) instead of paying full input price for the same bytes. That makes repeated-input cost much cheaper on multi-chunk runs.
+
+The pricing table reflects the 5-minute ephemeral cache rates lupe uses: cache rows default to `cacheRead = 0.1 × input` and `cacheWrite = 1.25 × input`. The same defaults apply to any prices you supply that omit the cache fields (see below).
+
+## Capping spend with `maxCostUsd`
+
+Set `maxCostUsd` in [your config](/docs/guides/configuration) to put a hard USD ceiling on a single review run. lupe enforces it at two points, both of which stop the run rather than silently overspend:
+
+1. **Pre-flight estimate — before any model call.** lupe projects the run's cost from the diff size and the resolved model price. If the projection exceeds `maxCostUsd`, or if the model has **no known price**, the run fails immediately without contacting the model. The estimate is deliberately biased to over-predict so the cap fails safe.
+2. **Post-priming breaker — after the first chunk.** On a multi-chunk review, lupe reviews one cache-priming chunk first, measures its *real* cost, and re-projects the full run from that measurement. If the projection would push the run over the cap, it aborts before fanning out the remaining chunks.
+
+Both checks fail closed on an unpriced model: if lupe cannot price the model, it will not run under a cost cap. The error tells you to set `modelPrices`.
+
+```yaml
+# .lupe.yaml
+maxCostUsd: 2.50
+```
+
+<Callout type="warn">If you use a model outside the verified Anthropic rows together with `maxCostUsd`, you must supply a price via `modelPrices` — otherwise the fail-closed cap will refuse to run.</Callout>
+
+## Correcting prices with `modelPrices`
+
+The `modelPrices` map lets you override or add prices per exact model id. This is essential for bring-your-own endpoints and non-Anthropic models, where the built-in placeholders are wrong and would make cost accounting — and the cost cap — inaccurate.
+
+Each entry is keyed by the exact model id and takes prices in USD **per 1M tokens**. `input` and `output` are required; `cacheRead` and `cacheWrite` are optional and default to `input × 0.1` and `input × 1.25` respectively.
+
+```yaml
+# .lupe.yaml
+modelPrices:
+  gpt-5:
+    input: 1.25
+    output: 10
+    cacheRead: 0.125
+    cacheWrite: 1.5625
+  my-self-hosted-model:
+    input: 0.8
+    output: 2.4
+    # cacheRead / cacheWrite omitted → derived from input
+```
+
+An override always wins over the built-in table, and providing one flips a previously "unknown" model to "known" so the cost cap can enforce a budget on it. See [providers and models](/docs/guides/providers-and-models) for how model ids are chosen per task.
+
+## Local backends are free
+
+The opt-in local backends (`claude-cli` and `codex-cli`) drive your own already-authenticated CLI. They are unmetered — lupe does not see token counts or per-call pricing for them — so they always report a cost of `$0.0000`. `maxCostUsd` has nothing to gate on these backends.

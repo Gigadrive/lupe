@@ -1,0 +1,182 @@
+---
+title: SDK reference
+description: Embed lupe in your own tools with the Promise-returning @gigadrive/lupe-sdk facade.
+---
+
+`@gigadrive/lupe-sdk` lets you run a lupe review from your own code — a build script, a bot, a
+custom CI step — and get back typed findings, a summary, and a cost breakdown. The surface is a
+plain Promise-based facade: you pass an options object and `await` a result.
+
+## Install
+
+```bash
+pnpm add @gigadrive/lupe-sdk
+```
+
+The package ships two functions:
+
+- `reviewDiff(options)` — review a raw unified diff string or a local git range.
+- `reviewPullRequest(options)` — fetch a GitHub PR diff, review it, and optionally post the review back.
+
+Both return a [`ReviewResult`](#reviewresult) (`reviewPullRequest` adds a `posted` flag).
+
+## The AI config
+
+Every review needs an `ai` object describing which provider and models to use. This mirrors the
+`ai` section of [`.lupe.yaml`](/docs/guides/configuration).
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `provider` | `'anthropic' \| 'openai' \| 'google' \| 'bedrock' \| 'openai-compatible' \| 'gateway'` | Required. |
+| `apiKey` | `string` | Falls back to the provider's conventional env var when omitted. |
+| `baseURL` | `string` | Required for `openai-compatible`; otherwise overrides a provider endpoint. |
+| `headers` | `Record<string, string>` | Extra request headers. |
+| `models` | `Partial<Record<'triage' \| 'review' \| 'verify' \| 'deep', string>>` | Per-task model id overrides. Only Anthropic ships built-in defaults; other providers must set the models they use. |
+| `region` | `string` | AWS region for `bedrock`. |
+| `name` | `string` | Display name for `openai-compatible`. |
+| `disableTools` | `boolean` | Turn off the agent's read-only repo tools (readFile/listDir/grep) for untrusted checkouts. |
+
+See [providers and models](/docs/guides/providers-and-models) for the full provider matrix.
+
+## reviewDiff(options)
+
+Review a diff you already have, or a range in a local checkout.
+
+| Option | Type | Notes |
+| --- | --- | --- |
+| `ai` | `LupeAiConfig` | Required. See [above](#the-ai-config). |
+| `rootDir` | `string` | Working tree used for the agent's read-only tools. Default `process.cwd()`. |
+| `diff` | `string` | A raw unified diff to review… |
+| `base` | `string` | …or the base ref of a local git range to diff. |
+| `head` | `string` | The head ref of a local git range. |
+| `target` | `Partial<ReviewTarget>` | Extra target metadata (title, body, SHAs) merged into the review context. |
+
+Provide **either** `diff` (a raw unified diff string) **or** a `base`/`head` range against `rootDir`.
+All of the shared [tuning knobs](#reviewtuning) are also accepted.
+
+## reviewPullRequest(options)
+
+Fetch a pull request's diff over the GitHub API, review it, and — when you opt in — post the
+result as one batched review with inline comments and a sticky summary.
+
+In addition to `ai`, `rootDir`, and the shared [tuning knobs](#reviewtuning):
+
+| Option | Type | Notes |
+| --- | --- | --- |
+| `github` | `{ owner, repo, number, token, baseUrl? }` | Required. `baseUrl` targets GitHub Enterprise. |
+| `headSha` | `string` | The commit the review comments anchor to. Required for posting. |
+| `post` | `boolean` | Post the review back to the PR. Default `false` (review only). |
+
+Posting requires **both** `post: true` **and** a `headSha`. With either missing, the review runs
+but nothing is written to GitHub, and `posted` is `false`.
+
+`reviewPullRequest` returns a `ReviewResult` extended with a `posted: boolean`.
+
+## ReviewResult
+
+Both functions resolve to this shape:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `findings` | `readonly Finding[]` | The published findings after the grounding verifier and filter chain. |
+| `summaryMarkdown` | `string` | The rendered review summary (Markdown). |
+| `cost` | `CostSummary` | Token usage and USD cost, broken down `byModel`. |
+| `sarif()` | `() => SarifLog` | Render the findings as a SARIF 2.1.0 log on demand. |
+
+Each `Finding` carries `ruleId`, `title`, `path`, `startLine`/`endLine`, `side`, `severity`,
+`category`, `message`, an optional `suggestion`, a `confidence` score, and grounding `evidence`.
+See [findings and output](/docs/guides/findings-and-output) for the full model and the SARIF shape.
+
+`cost` reports `{ usage, costUsd, byModel }`, where `usage` breaks down into `inputTokens`,
+`outputTokens`, `cacheReadTokens`, and `cacheCreationTokens`.
+
+<Callout type="info">When the (compressed) diff has no reviewable files, the review short-circuits before any model call — so an empty diff is offline and free, returning zero findings and zero cost.</Callout>
+
+## ReviewTuning
+
+These knobs are shared by both functions and mirror the keys in
+[`.lupe.yaml`](/docs/guides/configuration). All are optional.
+
+| Knob | Type | Notes |
+| --- | --- | --- |
+| `profile` | `'chill' \| 'assertive'` | Overall reviewer disposition. |
+| `maxFiles` | `number` | Cap the number of changed files reviewed. |
+| `maxFindings` | `number` | Cap the number of published findings (most severe + confident first). |
+| `confidenceThreshold` | `number` | Global confidence floor (0..1). Default `0.5`. |
+| `categoryThresholds` | `Partial<Record<Category, { minConfidence?, minSeverity? }>>` | Per-category confidence/severity gates that override the global floor. |
+| `pathThresholds` | `{ glob, minConfidence?, minSeverity? }[]` | Per-path-glob gates (highest precedence; last matching rule wins). |
+| `suppressAdvisory` | `boolean` | Drop advisory (style/maintainability/docs/test) findings entirely. |
+| `codingStandards` | `string` | Repo conventions injected into the review prompt. |
+| `minSeverityToComment` | `Severity` | PR posting only: less-severe findings stay summary-only. |
+| `verify` | `boolean` | Run the grounding verifier. Default `true`. |
+| `thorough` | `boolean` | Use the strongest model and extra passes. |
+| `pathFilters` | `readonly string[]` | Include/exclude globs applied to the diff. |
+| `maxChunkTokens` | `number` | Max serialised-diff tokens per review pass (large-PR map-reduce). Default `120000`. |
+| `maxChunks` | `number` | Hard ceiling on review passes; overflow is reported on the result, not dropped silently. |
+| `reviewConcurrency` | `number` | Bounded concurrency for the fan-out chunk passes. Default `3`. |
+| `maxCostUsd` | `number` | Hard USD ceiling; over-budget runs reject before or mid the model calls. |
+| `modelPrices` | `Record<string, ModelPrice>` | Per-model price overrides (keyed by exact model id) for accurate cost on BYO endpoints. |
+
+`Severity` is one of `critical`, `high`, `medium`, `low`, `info`. `Category` is one of
+`correctness`, `security`, `performance`, `concurrency`, `error-handling`, `resource-leak`,
+`api-misuse`, `data-loss`, `maintainability`, `style`, `test`, `docs`. See
+[cost and budget](/docs/guides/cost-and-budget) for how `maxCostUsd` and `modelPrices` interact.
+
+## Examples
+
+### Review a raw diff string
+
+```ts
+import { readFileSync } from 'node:fs';
+import { reviewDiff } from '@gigadrive/lupe-sdk';
+
+const diff = readFileSync('changes.diff', 'utf8');
+
+const result = await reviewDiff({
+  ai: {
+    provider: 'anthropic',
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  },
+  diff,
+  confidenceThreshold: 0.6,
+  maxCostUsd: 1.5,
+});
+
+for (const finding of result.findings) {
+  console.log(`[${finding.severity}] ${finding.path}:${finding.startLine} — ${finding.title}`);
+}
+
+console.log(`\n${result.findings.length} findings · $${result.cost.costUsd.toFixed(4)}`);
+```
+
+### Review a pull request and post the result
+
+```ts
+import { reviewPullRequest } from '@gigadrive/lupe-sdk';
+
+const result = await reviewPullRequest({
+  ai: {
+    provider: 'anthropic',
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  },
+  github: {
+    owner: 'gigadrive',
+    repo: 'lupe',
+    number: 42,
+    token: process.env.GITHUB_TOKEN!,
+  },
+  headSha: process.env.HEAD_SHA!,
+  post: true,
+  minSeverityToComment: 'medium',
+});
+
+console.log(`Posted: ${result.posted} · ${result.findings.length} findings`);
+```
+
+<Callout type="info">Posting is gated on both `post: true` and a `headSha` — the comments anchor to that commit. Omit either and the review still runs, but nothing is written to GitHub.</Callout>
+
+## Related
+
+- [Configuration](/docs/guides/configuration) — the `.lupe.yaml` keys these options mirror.
+- [Findings and output](/docs/guides/findings-and-output) — the `Finding` model and SARIF output.
+- [Cost and budget](/docs/guides/cost-and-budget) — budgets, price overrides, and cost accounting.

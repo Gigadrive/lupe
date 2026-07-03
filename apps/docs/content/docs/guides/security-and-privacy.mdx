@@ -1,0 +1,80 @@
+---
+title: Security & privacy
+description: How lupe handles your provider key, your code, and secrets — and how to run it safely on pull requests.
+---
+
+lupe is bring-your-own-token by design: it runs on your own model credentials, sends your diff only to the provider you configure, and never routes your code through a lupe-operated server. This page explains the trust model, the built-in secret redaction, the one workflow trigger you must get right, and the caveats around local backends.
+
+## Trust model
+
+lupe is a self-hosted agent. There is no lupe-operated backend in the request path.
+
+- **Your key, your spend.** You supply the provider API key. Requests go straight from the environment where lupe runs (your machine or your CI runner) to the provider endpoint you chose.
+- **Your diff goes to one place.** The code under review is sent only to the provider you configured — nowhere else. Choose your provider with the trust and data-handling posture you're comfortable with.
+- **One required secret.** The only secret the GitHub Action needs is your provider key (for example `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, or `AI_GATEWAY_API_KEY`). Reading the PR and posting the review use GitHub's built-in `GITHUB_TOKEN` — you don't create or store a separate GitHub credential.
+
+See [providers and models](/docs/guides/providers-and-models) for the full list of providers and the environment variable each one reads.
+
+## Secret redaction
+
+Before any diff content reaches the model, lupe applies a best-effort pass that strips high-confidence secret shapes and replaces the value with a `«redacted:kind»` marker. It targets:
+
+| Kind | What it matches |
+| ---- | --------------- |
+| `aws-access-key` | AWS access key IDs (`AKIA…`) |
+| `github-token` | GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`) |
+| `slack-token` | Slack tokens (`xoxb-`, `xoxa-`, `xoxp-`, `xoxr-`, `xoxs-`) |
+| `jwt` | JSON Web Tokens (`eyJ…` header.payload.signature) |
+| `private-key` | PEM private-key headers (`-----BEGIN … PRIVATE KEY-----`) |
+| `secret` | Secret-shaped assignments like `password`, `secret`, `token`, `api_key`, `access_token`, `client_secret` set to a long, digit-bearing value |
+
+The redaction is conservative on purpose. The assignment rule only blanks a long value that contains a digit, so ordinary code such as `token = getToken()` is left intact. Redaction rewrites only the value text — it never changes line numbers or which lines belong to the diff, so line anchoring of findings is unaffected.
+
+<Callout type="warn">
+This is defense-in-depth, not a guarantee. Pattern-based redaction cannot catch every secret shape. Never rely on it as your only control — keep real secrets out of source and rotate anything that leaks.
+</Callout>
+
+## The `pull_request_target` hazard
+
+Trigger your review workflow on **`pull_request`**, not `pull_request_target`.
+
+<Callout type="warn">
+`pull_request_target` runs with a writable token and access to your repository secrets. If a job on that trigger also checks out untrusted PR code, a malicious fork can run arbitrary code with those privileges and exfiltrate your secrets — a well-known RCE/secret-exfiltration vector. Default to `pull_request`, which runs fork PRs without your secrets.
+</Callout>
+
+The Action exposes an explicit opt-in for the rare case where you must run on `pull_request_target`: the `allow-untrusted-checkout` input (default `false`). Only set it to `true` when the job does **not** check out untrusted PR code. When enabled, the review runs tool-less regardless — the agent does not read repository files and works from the diff alone.
+
+A minimal, safe workflow:
+
+```yaml
+# .github/workflows/lupe.yml
+name: lupe
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gigadrive/lupe/apps/action@v0
+        with:
+          provider: anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+For every input and the required permissions, see the [GitHub Action reference](/docs/reference/github-action).
+
+## Local backend caveats
+
+The CLI can run against your personal Claude or Codex login instead of an API key, via the opt-in `claude-cli` and `codex-cli` backends (`--provider claude-cli` or `--provider codex-cli`). Two things to know:
+
+- **They never touch a token.** lupe only invokes your already-authenticated `claude` or `codex` binary over stdin/stdout. It never reads, writes, or forwards your login token.
+- **They're unofficial.** Reusing a subscription login this way is a Terms-of-Service gray area with no published carve-out, and may violate your provider's terms. lupe prints a one-time notice when you select one, and warns if a stray API key (like `ANTHROPIC_API_KEY`) is set that could override the subscription. Prefer API keys for shared or CI use.
+
+Because these backends run on an unmetered subscription rather than metered API usage, they report a `$0.0000` cost by design. See [cost and budget](/docs/guides/cost-and-budget) for how metered runs are priced.
