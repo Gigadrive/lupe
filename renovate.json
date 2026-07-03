@@ -55,6 +55,11 @@
       "rangeStrategy": "bump"
     },
     {
+      "description": "Hold pnpm on 10.x — pnpm 11 breaks OIDC trusted publishing (pnpm/pnpm#11513), which release.yml relies on",
+      "matchPackageNames": ["pnpm"],
+      "allowedVersions": "<11"
+    },
+    {
       "description": "Group vitest packages so they always update together",
       "matchManagers": ["npm"],
       "matchPackageNames": ["/^vitest$/", "/^@vitest\\//"],
