@@ -1,5 +1,13 @@
 # @gigadrive/lupe-github
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [a33c5a8]
+  - @gigadrive/lupe-core@0.2.1
+  - @gigadrive/lupe-git@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

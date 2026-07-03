@@ -1,6 +1,6 @@
 {
   "name": "@gigadrive/lupe-action",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "The reusable lupe GitHub Action (Node 24, ncc-bundled).",
   "license": "MIT",
