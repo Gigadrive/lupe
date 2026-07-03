@@ -7,10 +7,9 @@
 '@gigadrive/lupe-action': minor
 ---
 
-Initial release of **lupe** — a platform- and provider-agnostic, BYO-token AI code review agent.
+Production-readiness release: docs site + cost-aware, safer PR reviews.
 
-- `@gigadrive/lupe-core` — the review engine: Finding model, provider registry, hand-rolled agent loop, grounding verifier, filter chain, SARIF + markdown renderers.
-- `@gigadrive/lupe-git` — diff parsing, hunk → (line, side) anchoring, read-only repo tools, Qodo-style context compression.
-- `@gigadrive/lupe-github` — GitHub transport: paginated diff fetch, one batched review, sticky summary with incremental state, thread resolution.
-- `@gigadrive/lupe` — the CLI (`lupe`): `review`, `explain`, `check`, `init`, `learn`. BYO API keys or opt-in local Claude Code / Codex credentials.
-- `@gigadrive/lupe-sdk` — embeddable `reviewDiff` / `reviewPullRequest` Promise API.
+- **Cost controls** — pre-flight cost estimate + a hard `max-cost-usd` / `maxCostUsd` cap (Action input, CLI flag, SDK option) that fails the run before/mid the model calls; corrected + per-deployment-overridable model pricing (`modelPrices`).
+- **Cumulative incremental reviews** — the sticky summary now carries forward findings on files not touched by a re-review, and stale-thread resolution is scoped to the files reviewed this run (findings on untouched files survive). Cross-run dedupe stops force-push re-reviews from re-posting findings.
+- **Incremental-diff fix** — `listDiffSince` now paginates instead of silently seeing only the first 100 changed files, falling back to the full diff past the compare limit.
+- **Security** — the Action refuses to run on `pull_request_target` unless explicitly opted in (and then runs tool-less), and likely secrets are redacted from the diff before it reaches the model.
