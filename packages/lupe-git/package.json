@@ -1,6 +1,6 @@
 {
   "name": "@gigadrive/lupe-git",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Diff parsing, hunk → (line, side) anchoring, read-only repo tools, and Qodo-style context compression for lupe.",
   "license": "MIT",
   "files": [
