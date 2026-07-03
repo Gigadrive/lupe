@@ -1,6 +1,6 @@
 # Dogfood: lupe reviews its own pull requests.
-# Activates once the first release tag (v0.1.0 / v0) exists — see apps/action/README.md.
-# Requires an ANTHROPIC_API_KEY secret (org-level, shared to this repo).
+# Requires an ANTHROPIC_API_KEY secret (org-level, shared to this repo) — the
+# job fails until that secret exists. See apps/action/README.md.
 name: lupe
 
 on:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5 # default fetch-depth: 1 — the diff comes from the API, not git history
-      - uses: Gigadrive/lupe/apps/action@v0.1.0 # pin immutable during the pilot; move to @v0 once trusted
+      - uses: Gigadrive/lupe/apps/action@v0.2.0 # pin immutable during the pilot; move to @v0 once trusted
         with:
           provider: anthropic
           profile: chill
