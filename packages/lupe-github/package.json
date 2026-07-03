@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "GitHub transport for lupe: paginated diff fetch, batched review posting, sticky summary, and thread resolution.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gigadrive/lupe.git",
+    "directory": "packages/lupe-github"
+  },
   "files": [
     "dist"
   ],
