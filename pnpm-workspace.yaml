@@ -33,7 +33,7 @@ catalog:
   '@octokit/plugin-throttling': 11.0.3
 
   # --- CLI ergonomics + git ---
-  '@clack/prompts': 1.6.0
+  '@clack/prompts': 1.7.0
   simple-git: 3.36.0
 
   # --- shared types ---
