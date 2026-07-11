@@ -37,4 +37,4 @@ catalog:
   simple-git: 3.36.0
 
   # --- shared types ---
-  '@types/node': 24.7.1
+  '@types/node': 24.13.3
