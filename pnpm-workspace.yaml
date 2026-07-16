@@ -6,10 +6,10 @@ packages:
 # Reference with "catalog:" in any package's package.json.
 catalog:
   # --- Effect quartet (pin together; pre-1.0, version-locked) ---
-  effect: 3.21.4
-  '@effect/platform': 0.96.2
-  '@effect/platform-node': 0.107.0
-  '@effect/cli': 0.75.2
+  effect: 3.22.0
+  '@effect/platform': 0.97.0
+  '@effect/platform-node': 0.108.0
+  '@effect/cli': 0.76.0
 
   # --- Vercel AI SDK 6 + provider packages (pin together) ---
   ai: 6.0.208
