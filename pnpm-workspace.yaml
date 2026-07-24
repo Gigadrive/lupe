@@ -12,13 +12,13 @@ catalog:
   '@effect/cli': 0.75.2
 
   # --- Vercel AI SDK 6 + provider packages (pin together) ---
-  ai: 6.0.208
-  '@ai-sdk/anthropic': 3.0.85
-  '@ai-sdk/openai': 3.0.73
-  '@ai-sdk/google': 3.0.83
-  '@ai-sdk/amazon-bedrock': 4.0.119
-  '@ai-sdk/openai-compatible': 2.0.51
-  '@ai-sdk/gateway': 3.0.133
+  ai: 6.0.231
+  '@ai-sdk/anthropic': 3.0.98
+  '@ai-sdk/openai': 3.0.86
+  '@ai-sdk/google': 3.0.96
+  '@ai-sdk/amazon-bedrock': 4.0.137
+  '@ai-sdk/openai-compatible': 2.0.62
+  '@ai-sdk/gateway': 3.0.154
 
   # --- Schemas / config / parsing ---
   zod: 4.4.3
