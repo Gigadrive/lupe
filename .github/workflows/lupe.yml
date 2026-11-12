@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5 # default fetch-depth: 1 — the diff comes from the API, not git history
-      - uses: Gigadrive/lupe/apps/action@v0.2.0 # pin immutable during the pilot; move to @v0 once trusted
+      - uses: Gigadrive/lupe/apps/action@1cfb0b17fe2f7fad327bc3674e3062c8cbbcfca1 # v0.2.1 # pin immutable during the pilot; move to @v0 once trusted
         with:
           provider: anthropic
           profile: chill
