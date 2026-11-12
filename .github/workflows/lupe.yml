@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest # GitHub-hosted: guarantees the node24 action runtime
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5 # default fetch-depth: 1 — the diff comes from the API, not git history
-      - uses: Gigadrive/lupe/apps/action@v0.2.0 # pin immutable during the pilot; move to @v0 once trusted
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 # default fetch-depth: 1 — the diff comes from the API, not git history
+      - uses: Gigadrive/lupe/apps/action@c80a4dd311ffec15b074175eb9867a41fd1fbabe # v0.2.0 # pin immutable during the pilot; move to @v0 once trusted
         with:
           provider: anthropic
           profile: chill
